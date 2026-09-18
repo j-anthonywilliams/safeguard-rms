@@ -11,6 +11,7 @@ import { ACCESS_LABELS, canCreateRecords } from '@/lib/access-control'
 import type { AttendanceLogsRow } from '@/lib/db-types'
 import type { AccessLevel } from '@/lib/access-control'
 import { getDevAccount } from '@/lib/dev-accounts'
+import { DevAccountSwitcher } from '@/components/DevAccountSwitcher'
 
 interface Incident { id: string; userId: string; reportNumber: string; incidentDate: string; location: string; city: string; state: string; zipCode: string; subjectName: string; subjectPhone?: string; subjectDob?: string; violentFlag: string | number; banBarFlag: string | number; incidentCodes: string; disposition: string; narrative: string; approvalStatus: 'Pending' | 'Approved' | 'Rejected'; approvedBy?: string | null; approvedAt?: string | null; reviewFeedback?: string | null; reviewedBy?: string | null; reviewedAt?: string | null; createdAt: string; caseFileId?: string | null; parentIncidentId?: string | null; reportType?: string }
 interface CaseFile { id: string; userId: string; caseNumber: string; title: string; status: string; leadOfficer?: string | null; createdAt: string; updatedAt: string }
@@ -199,12 +200,72 @@ function ActionCard({ icon, title, description, action, onClick, children }: { i
 
 function LoginGate() {
   const [busy, setBusy] = useState(false)
+
   const openSignIn = () => {
     setBusy(true)
     blink.auth.login('/app')
   }
 
-  return <div className="flex min-h-dvh items-center justify-center bg-primary px-5"><div className="w-full max-w-md rounded-2xl border border-border/30 bg-card p-8 text-card-foreground shadow-lg"><div className="mb-8 flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground"><ShieldCheck className="size-5" /></div><div><p className="font-semibold">SafeGuard RMS</p><p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Secure operations</p></div></div><h1 className="font-serif text-3xl">Sign in to command.</h1><p className="mt-2 text-sm text-muted-foreground">Use the secure SafeGuard sign-in to access the records desk.</p><Button className="mt-7 w-full" size="lg" onClick={openSignIn} disabled={busy}>{busy ? 'Opening secure sign-in…' : 'Continue to secure sign-in'} <ArrowUpRight className="size-4" /></Button><div className="my-5 flex items-center gap-3 text-xs text-muted-foreground"><div className="h-px flex-1 bg-border" /> OR<div className="h-px flex-1 bg-border" /></div><Button className="w-full" size="lg" variant="outline" type="button" onClick={openSignIn} disabled={busy}><span className="font-semibold">G</span> Continue with Google</Button><p className="mt-5 text-center text-xs text-muted-foreground">Email, password, account creation, and Google sign-in are handled securely.</p></div></div>
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-primary px-5">
+      <div className="w-full max-w-md rounded-2xl border border-border/30 bg-card p-8 text-card-foreground shadow-lg">
+        <div className="mb-8 flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+            <ShieldCheck className="size-5" />
+          </div>
+
+          <div>
+            <p className="font-semibold">SafeGuard RMS</p>
+            <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              Secure operations
+            </p>
+          </div>
+        </div>
+
+        <h1 className="font-serif text-3xl">Sign in to command.</h1>
+
+        <p className="mt-2 text-sm text-muted-foreground">
+          Use the secure SafeGuard sign-in to access the records desk.
+        </p>
+
+        <Button
+          className="mt-7 w-full"
+          size="lg"
+          onClick={openSignIn}
+          disabled={busy}
+        >
+          {busy ? 'Opening secure sign-in…' : 'Continue to secure sign-in'}
+          <ArrowUpRight className="size-4" />
+        </Button>
+
+        <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
+          <div className="h-px flex-1 bg-border" />
+          OR
+          <div className="h-px flex-1 bg-border" />
+        </div>
+
+        <Button
+          className="w-full"
+          size="lg"
+          variant="outline"
+          type="button"
+          onClick={openSignIn}
+          disabled={busy}
+        >
+          <span className="font-semibold">G</span>
+          Continue with Google
+        </Button>
+
+        <p className="mt-5 text-center text-xs text-muted-foreground">
+          Email, password, account creation, and Google sign-in are handled securely.
+        </p>
+
+        {import.meta.env.DEV && (
+          <DevAccountSwitcher />
+        )}
+      </div>
+    </div>
+  )
 }
 
 function Panel({ type, userId, accessLevel, directoryUsers, initialIncident, onClose, onSaved, incidentTable, caseFileTable, equipmentTable, evidenceTable, eventTable }: { type: 'incident' | 'equipment' | 'evidence' | 'case'; userId: string; accessLevel: AccessLevel; directoryUsers: { id: string; email: string; displayName?: string | null }[]; initialIncident?: Incident | null; onClose: () => void; onSaved: () => void; incidentTable: ReturnType<typeof blink.db.table<Incident>>; caseFileTable: ReturnType<typeof blink.db.table<CaseFile>>; equipmentTable: ReturnType<typeof blink.db.table<Equipment>>; evidenceTable: ReturnType<typeof blink.db.table<Evidence>>; eventTable: ReturnType<typeof blink.db.table<CustodyEvent>> }) {
