@@ -1,14 +1,13 @@
 /**
  * Shell — Mobile-responsive app layout (shadcn/ui based).
  *
- * USAGE (in a route or SharedAppLayout):
- *   <Shell sidebar={<MySidebarContent />}>
- *     <Page>...</Page>
- *   </Shell>
+ * Desktop (md+):
+ *   - Sidebar remains stationary at the left side of the viewport.
+ *   - Main content occupies the remaining width and scrolls independently.
  *
- * Desktop (md+): the sidebar is a fixed column on the left, main content fills
- * the rest. Mobile: the sidebar is hidden and opens in a Sheet drawer via the
- * hamburger button in the mobile header. Customize freely — this is your code.
+ * Mobile:
+ *   - Sidebar is hidden.
+ *   - Sidebar opens in a Sheet drawer from the left.
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
@@ -17,33 +16,39 @@ import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 
 interface ShellProps {
-  /** Sidebar content — e.g. <AppSidebarShell /> or your own nav */
   sidebar: ReactNode
-  /** App name shown in the mobile header */
   appName?: string
   children: ReactNode
 }
 
-export function Shell({ sidebar, appName = 'App', children }: ShellProps) {
+export function Shell({
+  sidebar,
+  appName = 'App',
+  children,
+}: ShellProps) {
   const [open, setOpen] = useState(false)
 
   return (
-    <div className="flex min-h-dvh">
-      {/* Desktop sidebar — hidden on mobile, always visible on md+.
-          AppSidebarShell owns its own width and collapse animation. */}
-      <aside className="hidden md:block shrink-0">{sidebar}</aside>
+    <div className="flex h-dvh w-full overflow-hidden">
+      {/* Desktop sidebar */}
+      <aside className="hidden h-dvh shrink-0 md:block">
+        {sidebar}
+      </aside>
 
-      {/* Mobile sidebar — Sheet drawer opened by the hamburger below. */}
+      {/* Mobile sidebar */}
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="left" className="w-64 p-0">
+        <SheetContent
+          side="left"
+          className="h-dvh w-64 p-0"
+        >
           {sidebar}
         </SheetContent>
       </Sheet>
 
-      {/* Main content column */}
-      <main className="flex flex-1 min-w-0 flex-col">
-        {/* Mobile header — hamburger + app name, only shown below md. */}
-        <div className="md:hidden flex items-center gap-3 px-4 h-14 border-b border-border bg-background sticky top-0 z-30">
+      {/* Main content */}
+      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
+        {/* Mobile header */}
+        <div className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background px-4 md:hidden">
           <Button
             variant="ghost"
             size="icon"
@@ -53,7 +58,10 @@ export function Shell({ sidebar, appName = 'App', children }: ShellProps) {
           >
             <Menu className="size-5" />
           </Button>
-          <span className="font-semibold text-sm">{appName}</span>
+
+          <span className="font-semibold text-sm">
+            {appName}
+          </span>
         </div>
 
         {children}

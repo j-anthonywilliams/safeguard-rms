@@ -12,6 +12,7 @@ import type { AttendanceLogsRow } from '@/lib/db-types'
 import type { AccessLevel } from '@/lib/access-control'
 import { getDevAccount } from '@/lib/dev-accounts'
 import { DevAccountSwitcher } from '@/components/DevAccountSwitcher'
+import { UserAccountMenu } from '@/components/UserAccountMenu'
 
 interface Incident { id: string; userId: string; reportNumber: string; incidentDate: string; location: string; city: string; state: string; zipCode: string; subjectName: string; subjectPhone?: string; subjectDob?: string; violentFlag: string | number; banBarFlag: string | number; incidentCodes: string; disposition: string; narrative: string; approvalStatus: 'Pending' | 'Approved' | 'Rejected'; approvedBy?: string | null; approvedAt?: string | null; reviewFeedback?: string | null; reviewedBy?: string | null; reviewedAt?: string | null; createdAt: string; caseFileId?: string | null; parentIncidentId?: string | null; reportType?: string }
 interface CaseFile { id: string; userId: string; caseNumber: string; title: string; status: string; leadOfficer?: string | null; createdAt: string; updatedAt: string }
@@ -125,7 +126,6 @@ function DashboardHome() {
     } catch (error) { toast.error('Could not load records', { description: error instanceof Error ? error.message : 'Please try again.' }) }
   }; loadRecords() }, [user, accessLevel, incidentTable, caseFileTable, equipmentTable, evidenceTable, eventTable, attendanceTable])
 
-  const initials = (user?.displayName || user?.email || 'Officer').slice(0, 2).toUpperCase()
   const availableEquipment = useMemo(() => equipment.filter(item => item.status === 'Available').length, [equipment])
   const activeCases = useMemo(() => caseFiles.filter(file => !['closed', 'archived', 'complete'].includes(file.status.toLowerCase())), [caseFiles])
   const pendingReviews = useMemo(() => incidents.filter(item => getApprovalStatus(item.approvalStatus) === 'Pending'), [incidents])
@@ -180,18 +180,538 @@ function DashboardHome() {
   const recordUserId = user.id
   const displayUser = user || { id: recordUserId, email: 'development@local', displayName: 'Development officer' }
 
-  return <div className="min-h-dvh bg-background text-foreground">
-    <header className="border-b border-border bg-background/90 px-4 py-3 backdrop-blur md:px-8"><div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4"><div className="flex items-center gap-3"><div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-md"><ShieldCheck className="size-5" /></div><div><p className="text-sm font-semibold tracking-tight">SafeGuard RMS</p><p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Operations / Command center</p></div></div><div className="flex items-center gap-2"><Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle light and dark mode">{dark ? <Sun className="size-4" /> : <Moon className="size-4" />}</Button><div className="hidden items-center gap-2 border-l border-border pl-3 sm:flex"><div className="flex size-8 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-foreground">{initials}</div><div className="leading-tight"><p className="text-xs font-medium">{displayUser.displayName}</p><p className="text-[10px] text-muted-foreground">{ACCESS_LABELS[accessLevel]} access</p></div></div></div></div></header>
-    <main className="mx-auto max-w-[1440px] space-y-7 px-4 py-6 md:px-8 md:py-8"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="mb-2 font-mono text-[11px] uppercase tracking-[0.2em] text-primary">Tuesday · September 01, 2026</p><h1 className="font-serif text-3xl tracking-tight md:text-4xl">Good evening, {displayUser.displayName?.split(' ')[0] || 'Officer'}.</h1><p className="mt-2 max-w-xl text-sm text-muted-foreground">Your operational picture at a glance. Keep reports precise, custody continuous, and your team equipped.</p><div className="mt-4 flex flex-wrap items-center gap-2"><span className="rounded-full bg-primary/10 px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-primary">{ACCESS_LABELS[accessLevel]} access</span><span className="text-xs text-muted-foreground">Five-level access control is active</span></div></div><div className="flex flex-wrap gap-2"><Button variant={isClockedIn ? 'outline' : 'default'} onClick={() => clockEvent(isClockedIn ? 'clock_out' : 'clock_in')} disabled={clockBusy}><MapPin className="size-4" />{clockBusy ? 'Locating…' : isClockedIn ? 'Clock out' : 'Clock in'}</Button><Button variant="outline" onClick={() => setActivePanel('evidence')} disabled={!canCreateRecords(accessLevel)}><Archive className="size-4" />Log property</Button><Button onClick={() => openIncidentEditor()} disabled={!canCreateRecords(accessLevel)}><Plus className="size-4" />New report</Button></div></div>
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><Metric icon={<FileText />} label="Open reports" value={String(incidents.length)} detail="Needs disposition review" accent="bg-primary" /><Metric icon={<AlertTriangle />} label="Flagged subjects" value={String(incidents.filter(i => Number(i.violentFlag) || Number(i.banBarFlag)).length)} detail="Violent or ban / bar" accent="bg-destructive" /><Metric icon={<ClipboardPlus />} label="Active cases" value={String(activeCases.length)} detail="Open operational files" accent="bg-chart-2" /><Metric icon={<Package />} label="Available equipment" value={String(availableEquipment)} detail={`${equipment.length} total tracked`} accent="bg-chart-3" /><Metric icon={<Clock3 />} label="Custody events" value={String(events.length)} detail="Latest activity log" accent="bg-accent" /></section>
-      {canApproveIncidents(accessLevel) && <Card className="border-primary/30 bg-primary/5"><CardContent className="flex flex-col justify-between gap-4 p-5 sm:flex-row sm:items-center"><div className="flex items-start gap-3"><div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Eye className="size-4" /></div><div><p className="text-sm font-semibold">Supervisor review queue</p><p className="mt-1 text-xs text-muted-foreground">{pendingReviews.length ? `${pendingReviews.length} report${pendingReviews.length === 1 ? '' : 's'} waiting for approval.` : 'No reports are waiting for approval.'}</p></div></div>{pendingReviews.length > 0 && <Button size="sm" onClick={() => reviewIncident(pendingReviews[0])}>Review next <ArrowUpRight className="size-3.5" /></Button>}</CardContent></Card>}
-      <section id="incidents" className="scroll-mt-6 grid gap-5 xl:grid-cols-[1.35fr_0.65fr]"><Card className="overflow-hidden"><CardHeader className="flex flex-row items-center justify-between border-b border-border bg-muted/30 pb-4"><div><CardTitle className="text-base">Recent incident reports</CardTitle><p className="mt-1 text-xs text-muted-foreground">Your latest reports and review status</p></div><Button variant="ghost" size="sm" onClick={() => openIncidentEditor()} disabled={!canCreateRecords(accessLevel)}>Create report <ArrowUpRight className="size-3.5" /></Button></CardHeader><CardContent className="p-0">{incidents.length ? incidents.map(item => <div key={item.id} className="flex items-center justify-between gap-4 border-b border-border px-5 py-4 transition-colors last:border-0 hover:bg-muted/30"><div className="flex min-w-0 items-center gap-3"><div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground"><FileText className="size-4" /></div><div className="min-w-0"><p className="truncate text-sm font-medium">{item.reportNumber} · {item.location}</p><div className="mt-2 flex flex-wrap items-center gap-2 text-xs">{parseCodeDispositions(item).map((pair, index) => <span key={`${pair.code}-${index}`} className="rounded bg-secondary px-2 py-1 text-secondary-foreground"><span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">Code {index + 1}</span> <span className="font-medium">{pair.code}</span><span className="mx-1 text-muted-foreground">→</span><span className="text-muted-foreground">{pair.disposition}</span></span>)}</div></div></div><div className="flex shrink-0 items-center gap-2"><span className={`hidden rounded-full px-2 py-1 font-mono text-[10px] sm:block ${approvalBadgeClass[getApprovalStatus(item.approvalStatus)]}`}>{getApprovalStatus(item.approvalStatus)}</span><span className="hidden rounded-full bg-accent px-2 py-1 font-mono text-[10px] text-accent-foreground sm:block">{Number(item.violentFlag) ? 'VIOLENT' : Number(item.banBarFlag) ? 'BAN / BAR' : 'STANDARD'}</span>{canApproveIncidents(accessLevel) && item.approvalStatus !== 'Approved' && <Button variant="outline" size="sm" onClick={() => approveIncident(item)}>Approve</Button>}<Button variant="outline" size="sm" onClick={() => openIncidentEditor(item)} disabled={!canCreateRecords(accessLevel)}>Edit</Button><Button variant="ghost" size="sm" onClick={() => openSupplementalEditor(item)} disabled={!canCreateRecords(accessLevel)}>Supplement</Button></div></div>) : <Empty icon={<FileText />} text="No reports yet. Start with the facts." action={() => openIncidentEditor()} />}</CardContent></Card>
-      <Card><CardHeader className="border-b border-border bg-muted/30 pb-4"><CardTitle className="text-base">Custody activity</CardTitle><p className="mt-1 text-xs text-muted-foreground">Evidence movement, logged live</p></CardHeader><CardContent className="p-0">{events.length ? events.slice(0, 5).map(event => <div key={event.id} className="flex gap-3 border-b border-border px-5 py-4 last:border-0"><div className="mt-1 size-2 shrink-0 rounded-full bg-primary ring-4 ring-primary/10" /><div><p className="text-sm font-medium">{event.action}</p><p className="mt-1 text-xs text-muted-foreground">{event.actor} · {event.note || 'No note added'}</p></div></div>) : <Empty icon={<Archive />} text="No custody events logged." action={() => setActivePanel('evidence')} />}</CardContent></Card></section>
-      <section className="grid gap-5 lg:grid-cols-2"><div id="equipment" className="scroll-mt-6"><ActionCard icon={<Crosshair />} title="Equipment issue desk" description={`${equipment.length} assets tracked · ${availableEquipment} ready to issue`} action={canCreateRecords(accessLevel) ? 'Issue equipment' : 'Read only'} onClick={() => canCreateRecords(accessLevel) && setActivePanel('equipment')}><div className="flex -space-x-2">{equipment.slice(0, 4).map(item => <div key={item.id} className="flex size-8 items-center justify-center rounded-full border-2 border-card bg-secondary font-mono text-[10px] text-secondary-foreground">{item.name.slice(0, 1)}</div>)}</div></ActionCard></div><div id="evidence" className="scroll-mt-6"><ActionCard icon={<Users />} title="Evidence inventory" description={`${evidence.length} property items · chain of custody intact`} action={canCreateRecords(accessLevel) ? 'Log property' : 'Read only'} onClick={() => canCreateRecords(accessLevel) && setActivePanel('evidence')}><div className="font-mono text-xs text-muted-foreground">AUDIT READY <span className="text-primary">●</span></div></ActionCard></div></section>
-      <section className="grid gap-5 lg:grid-cols-2"><Card><CardHeader className="flex flex-row items-center justify-between border-b border-border bg-muted/30 pb-4"><div><CardTitle className="text-base">Case files</CardTitle><p className="mt-1 text-xs text-muted-foreground">Manage cases and their related reports.</p></div><Button variant="outline" size="sm" onClick={() => setActivePanel('case')} disabled={!canCreateRecords(accessLevel)}><Plus className="size-3.5" />New case</Button></CardHeader><CardContent className="p-0">{caseFiles.length ? caseFiles.map(file => <div key={file.id} className="flex items-center justify-between gap-3 border-b border-border px-5 py-3 last:border-0"><div><p className="text-sm font-medium">{file.caseNumber} · {file.title}</p><p className="text-xs text-muted-foreground">{file.status} · {incidents.filter(item => item.caseFileId === file.id).length} report(s)</p></div><Button variant="ghost" size="sm" onClick={() => setActivePanel('incident')} disabled={!canCreateRecords(accessLevel)}>Add report</Button></div>) : <Empty icon={<ClipboardPlus />} text="No case files yet." action={() => setActivePanel('case')} />}</CardContent></Card><Card><CardHeader className="flex flex-row items-center justify-between border-b border-border bg-muted/30 pb-4"><div><CardTitle className="text-base">Printable reports</CardTitle><p className="mt-1 text-xs text-muted-foreground">Print the incident register.</p></div><Button variant="outline" size="sm" onClick={printAllIncidents}><FileText className="size-3.5" />Print all</Button></CardHeader><CardContent><p className="text-sm text-muted-foreground">{incidents.length} report{incidents.length === 1 ? '' : 's'} ready to print.</p></CardContent></Card></section>
-      <section className="hidden print:block"><h1 className="mb-6 text-2xl font-bold">SafeGuard RMS — Incident Report Register</h1>{incidents.map(item => <article key={item.id} className="mb-8 break-inside-avoid border-b border-foreground pb-5"><h2 className="text-lg font-bold">{item.reportNumber} {item.reportType && item.reportType !== 'Original' ? `· ${item.reportType}` : ''}</h2><p>Incident date: {item.incidentDate} · Location: {item.location}, {item.city}, {item.state} {item.zipCode}</p><p>Subject: {item.subjectName} · Flags: {Number(item.violentFlag) ? 'Violent ' : ''}{Number(item.banBarFlag) ? 'Ban / Bar' : 'None'}</p><p>Codes / dispositions: {parseCodeDispositions(item).map(pair => `${pair.code} — ${pair.disposition}`).join('; ')}</p><p className="mt-2 whitespace-pre-wrap">{item.narrative}</p></article>)}</section>
-    </main>{activePanel && activePanel !== 'review' && <Panel type={activePanel} userId={recordUserId} accessLevel={accessLevel} directoryUsers={directoryUsers} initialIncident={editingIncident} onClose={() => { setActivePanel(null); setEditingIncident(null) }} onSaved={() => { setActivePanel(null); setEditingIncident(null); window.location.reload() }} incidentTable={incidentTable} caseFileTable={caseFileTable} equipmentTable={equipmentTable} evidenceTable={evidenceTable} eventTable={eventTable} />}
-  </div>
+return (
+  <div className="min-h-dvh bg-background text-foreground">
+    <header className="border-b border-border bg-background/90 px-4 py-3 backdrop-blur md:px-8">
+      <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-md">
+            <ShieldCheck className="size-5" />
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold tracking-tight">
+              SafeGuard RMS
+            </p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+              Operations / Command center
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            aria-label="Toggle light and dark mode"
+          >
+            {dark ? (
+              <Sun className="size-4" />
+            ) : (
+              <Moon className="size-4" />
+            )}
+          </Button>
+
+          <UserAccountMenu />
+        </div>
+      </div>
+    </header>
+
+    <main className="mx-auto max-w-[1440px] space-y-7 px-4 py-6 md:px-8 md:py-8">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div>
+          <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.2em] text-primary">
+            Tuesday · September 01, 2026
+          </p>
+
+          <h1 className="font-serif text-3xl tracking-tight md:text-4xl">
+            Good evening, {displayUser.displayName?.split(' ')[0] || 'Officer'}.
+          </h1>
+
+          <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+            Your operational picture at a glance. Keep reports precise, custody continuous, and your team equipped.
+          </p>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-primary/10 px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-primary">
+              {ACCESS_LABELS[accessLevel]} access
+            </span>
+
+            <span className="text-xs text-muted-foreground">
+              Five-level access control is active
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant={isClockedIn ? 'outline' : 'default'}
+            onClick={() => clockEvent(isClockedIn ? 'clock_out' : 'clock_in')}
+            disabled={clockBusy}
+          >
+            <MapPin className="size-4" />
+            {clockBusy ? 'Locating…' : isClockedIn ? 'Clock out' : 'Clock in'}
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={() => setActivePanel('evidence')}
+            disabled={!canCreateRecords(accessLevel)}
+          >
+            <Archive className="size-4" />
+            Log property
+          </Button>
+
+          <Button
+            onClick={() => openIncidentEditor()}
+            disabled={!canCreateRecords(accessLevel)}
+          >
+            <Plus className="size-4" />
+            New report
+          </Button>
+        </div>
+      </div>
+
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <Metric
+          icon={<FileText />}
+          label="Open reports"
+          value={String(incidents.length)}
+          detail="Needs disposition review"
+          accent="bg-primary"
+        />
+
+        <Metric
+          icon={<AlertTriangle />}
+          label="Flagged subjects"
+          value={String(
+            incidents.filter(
+              i => Number(i.violentFlag) || Number(i.banBarFlag)
+            ).length
+          )}
+          detail="Violent or ban / bar"
+          accent="bg-destructive"
+        />
+
+        <Metric
+          icon={<ClipboardPlus />}
+          label="Active cases"
+          value={String(activeCases.length)}
+          detail="Open operational files"
+          accent="bg-chart-2"
+        />
+
+        <Metric
+          icon={<Package />}
+          label="Available equipment"
+          value={String(availableEquipment)}
+          detail={`${equipment.length} total tracked`}
+          accent="bg-chart-3"
+        />
+
+        <Metric
+          icon={<Clock3 />}
+          label="Custody events"
+          value={String(events.length)}
+          detail="Latest activity log"
+          accent="bg-accent"
+        />
+      </section>
+
+      {canApproveIncidents(accessLevel) && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="flex flex-col justify-between gap-4 p-5 sm:flex-row sm:items-center">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <Eye className="size-4" />
+              </div>
+
+              <div>
+                <p className="text-sm font-semibold">
+                  Supervisor review queue
+                </p>
+
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {pendingReviews.length
+                    ? `${pendingReviews.length} report${pendingReviews.length === 1 ? '' : 's'} waiting for approval.`
+                    : 'No reports are waiting for approval.'}
+                </p>
+              </div>
+            </div>
+
+            {pendingReviews.length > 0 && (
+              <Button
+                size="sm"
+                onClick={() => reviewIncident(pendingReviews[0])}
+              >
+                Review next
+                <ArrowUpRight className="size-3.5" />
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <section
+        id="incidents"
+        className="scroll-mt-6 grid gap-5 xl:grid-cols-[1.35fr_0.65fr]"
+      >
+        <Card className="overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between border-b border-border bg-muted/30 pb-4">
+            <div>
+              <CardTitle className="text-base">
+                Recent incident reports
+              </CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Your latest reports and review status
+              </p>
+            </div>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => openIncidentEditor()}
+              disabled={!canCreateRecords(accessLevel)}
+            >
+              Create report
+              <ArrowUpRight className="size-3.5" />
+            </Button>
+          </CardHeader>
+
+          <CardContent className="p-0">
+            {incidents.length ? (
+              incidents.map(item => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between gap-4 border-b border-border px-5 py-4 transition-colors last:border-0 hover:bg-muted/30"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
+                      <FileText className="size-4" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {item.reportNumber} · {item.location}
+                      </p>
+
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                        {parseCodeDispositions(item).map((pair, index) => (
+                          <span
+                            key={`${pair.code}-${index}`}
+                            className="rounded bg-secondary px-2 py-1 text-secondary-foreground"
+                          >
+                            <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+                              Code {index + 1}
+                            </span>{' '}
+                            <span className="font-medium">{pair.code}</span>
+                            <span className="mx-1 text-muted-foreground">→</span>
+                            <span className="text-muted-foreground">
+                              {pair.disposition}
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span
+                      className={`hidden rounded-full px-2 py-1 font-mono text-[10px] sm:block ${approvalBadgeClass[getApprovalStatus(item.approvalStatus)]}`}
+                    >
+                      {getApprovalStatus(item.approvalStatus)}
+                    </span>
+
+                    <span className="hidden rounded-full bg-accent px-2 py-1 font-mono text-[10px] text-accent-foreground sm:block">
+                      {Number(item.violentFlag)
+                        ? 'VIOLENT'
+                        : Number(item.banBarFlag)
+                          ? 'BAN / BAR'
+                          : 'STANDARD'}
+                    </span>
+
+                    {canApproveIncidents(accessLevel) &&
+                      item.approvalStatus !== 'Approved' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => approveIncident(item)}
+                        >
+                          Approve
+                        </Button>
+                      )}
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openIncidentEditor(item)}
+                      disabled={!canCreateRecords(accessLevel)}
+                    >
+                      Edit
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openSupplementalEditor(item)}
+                      disabled={!canCreateRecords(accessLevel)}
+                    >
+                      Supplement
+                    </Button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <Empty
+                icon={<FileText />}
+                text="No reports yet. Start with the facts."
+                action={() => openIncidentEditor()}
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="border-b border-border bg-muted/30 pb-4">
+            <CardTitle className="text-base">
+              Custody activity
+            </CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Evidence movement, logged live
+            </p>
+          </CardHeader>
+
+          <CardContent className="p-0">
+            {events.length ? (
+              events.slice(0, 5).map(event => (
+                <div
+                  key={event.id}
+                  className="flex gap-3 border-b border-border px-5 py-4 last:border-0"
+                >
+                  <div className="mt-1 size-2 shrink-0 rounded-full bg-primary ring-4 ring-primary/10" />
+
+                  <div>
+                    <p className="text-sm font-medium">
+                      {event.action}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {event.actor} · {event.note || 'No note added'}
+                    </p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <Empty
+                icon={<Archive />}
+                text="No custody events logged."
+                action={() => setActivePanel('evidence')}
+              />
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-5 lg:grid-cols-2">
+        <div id="equipment" className="scroll-mt-6">
+          <ActionCard
+            icon={<Crosshair />}
+            title="Equipment issue desk"
+            description={`${equipment.length} assets tracked · ${availableEquipment} ready to issue`}
+            action={canCreateRecords(accessLevel) ? 'Issue equipment' : 'Read only'}
+            onClick={() =>
+              canCreateRecords(accessLevel) &&
+              setActivePanel('equipment')
+            }
+          >
+            <div className="flex -space-x-2">
+              {equipment.slice(0, 4).map(item => (
+                <div
+                  key={item.id}
+                  className="flex size-8 items-center justify-center rounded-full border-2 border-card bg-secondary font-mono text-[10px] text-secondary-foreground"
+                >
+                  {item.name.slice(0, 1)}
+                </div>
+              ))}
+            </div>
+          </ActionCard>
+        </div>
+
+        <div id="evidence" className="scroll-mt-6">
+          <ActionCard
+            icon={<Users />}
+            title="Evidence inventory"
+            description={`${evidence.length} property items · chain of custody intact`}
+            action={canCreateRecords(accessLevel) ? 'Log property' : 'Read only'}
+            onClick={() =>
+              canCreateRecords(accessLevel) &&
+              setActivePanel('evidence')
+            }
+          >
+            <div className="font-mono text-xs text-muted-foreground">
+              AUDIT READY <span className="text-primary">●</span>
+            </div>
+          </ActionCard>
+        </div>
+      </section>
+
+      <section className="grid gap-5 lg:grid-cols-2">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between border-b border-border bg-muted/30 pb-4">
+            <div>
+              <CardTitle className="text-base">Case files</CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Manage cases and their related reports.
+              </p>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setActivePanel('case')}
+              disabled={!canCreateRecords(accessLevel)}
+            >
+              <Plus className="size-3.5" />
+              New case
+            </Button>
+          </CardHeader>
+
+          <CardContent className="p-0">
+            {caseFiles.length ? (
+              caseFiles.map(file => (
+                <div
+                  key={file.id}
+                  className="flex items-center justify-between gap-3 border-b border-border px-5 py-3 last:border-0"
+                >
+                  <div>
+                    <p className="text-sm font-medium">
+                      {file.caseNumber} · {file.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {file.status} ·{' '}
+                      {incidents.filter(item => item.caseFileId === file.id).length}{' '}
+                      report(s)
+                    </p>
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setActivePanel('incident')}
+                    disabled={!canCreateRecords(accessLevel)}
+                  >
+                    Add report
+                  </Button>
+                </div>
+              ))
+            ) : (
+              <Empty
+                icon={<ClipboardPlus />}
+                text="No case files yet."
+                action={() => setActivePanel('case')}
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between border-b border-border bg-muted/30 pb-4">
+            <div>
+              <CardTitle className="text-base">
+                Printable reports
+              </CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Print the incident register.
+              </p>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={printAllIncidents}
+            >
+              <FileText className="size-3.5" />
+              Print all
+            </Button>
+          </CardHeader>
+
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              {incidents.length} report{incidents.length === 1 ? '' : 's'} ready to print.
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="hidden print:block">
+        <h1 className="mb-6 text-2xl font-bold">
+          SafeGuard RMS — Incident Report Register
+        </h1>
+
+        {incidents.map(item => (
+          <article
+            key={item.id}
+            className="mb-8 break-inside-avoid border-b border-foreground pb-5"
+          >
+            <h2 className="text-lg font-bold">
+              {item.reportNumber}{' '}
+              {item.reportType && item.reportType !== 'Original'
+                ? `· ${item.reportType}`
+                : ''}
+            </h2>
+
+            <p>
+              Incident date: {item.incidentDate} · Location: {item.location},{' '}
+              {item.city}, {item.state} {item.zipCode}
+            </p>
+
+            <p>
+              Subject: {item.subjectName} · Flags:{' '}
+              {Number(item.violentFlag) ? 'Violent ' : ''}
+              {Number(item.banBarFlag) ? 'Ban / Bar' : 'None'}
+            </p>
+
+            <p>
+              Codes / dispositions:{' '}
+              {parseCodeDispositions(item)
+                .map(pair => `${pair.code} — ${pair.disposition}`)
+                .join('; ')}
+            </p>
+
+            <p className="mt-2 whitespace-pre-wrap">
+              {item.narrative}
+            </p>
+          </article>
+        ))}
+      </section>
+    </main>
+
+{activePanel && activePanel !== 'review' && (
+  <Panel
+    type={activePanel}
+    userId={recordUserId}
+    accessLevel={accessLevel}
+    directoryUsers={directoryUsers}
+    initialIncident={editingIncident}
+    onClose={() => {
+      setActivePanel(null)
+      setEditingIncident(null)
+    }}
+    onSaved={() => {
+      setActivePanel(null)
+      setEditingIncident(null)
+      window.location.reload()
+    }}
+    incidentTable={incidentTable}
+    caseFileTable={caseFileTable}
+    equipmentTable={equipmentTable}
+    evidenceTable={evidenceTable}
+    eventTable={eventTable}
+  />
+)}
+
+<DevAccountSwitcher />
+</div>
 }
 
 function Metric({ icon, label, value, detail, accent }: { icon: React.ReactNode; label: string; value: string; detail: string; accent: string }) { return <Card className="relative overflow-hidden transition-transform duration-200 hover:-translate-y-0.5"><div className={`absolute inset-y-0 left-0 w-1 ${accent}`} /><CardContent className="p-5"><div className="mb-4 flex items-center justify-between"><span className="text-muted-foreground">{icon}</span><span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Live</span></div><p className="text-3xl font-semibold tracking-tight">{value}</p><p className="mt-1 text-sm font-medium">{label}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></CardContent></Card> }

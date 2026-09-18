@@ -12,7 +12,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { blink } from '@/blink/client'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
   Tooltip,
@@ -24,10 +23,8 @@ import {
   Archive,
   ClipboardPlus,
   LayoutDashboard,
-  LogOut,
   Package,
   PanelLeft,
-  UserRound,
   Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -55,7 +52,6 @@ const NAV_ITEMS: NavItemDef[] = [
   { href: '/app#incidents', icon: <ClipboardPlus className="h-4 w-4" />, label: 'Incident reports' },
   { href: '/app#equipment', icon: <Package className="h-4 w-4" />, label: 'Equipment desk' },
   { href: '/app#evidence', icon: <Archive className="h-4 w-4" />, label: 'Property & evidence' },
-  { href: '/app/profile', icon: <UserRound className="h-4 w-4" />, label: 'My profile' },
   { href: '/app/users', icon: <Users className="h-4 w-4" />, label: 'User management', requiresManagement: true },
 ]
 
@@ -85,14 +81,14 @@ function NavItem({ item, collapsed }: { item: NavItemDef; collapsed: boolean }) 
 }
 
 export function AppSidebarShell() {
-  const [currentUser, setCurrentUser] = useState<{ id: string; email?: string; displayName?: string } | null>(null)
-  const [accessLevel, setAccessLevel] = useState<AccessLevel>('user')
-  const rolesTable = useMemo(() => blink.db.table<AppRole>('app_roles'), [])
+  // const [currentUser, setCurrentUser] = useState<{ id: string; email?: string; displayName?: string } | null>(null)
+  // const [accessLevel, setAccessLevel] = useState<AccessLevel>('user')
+  // const rolesTable = useMemo(() => blink.db.table<AppRole>('app_roles'), [])
 
-  useEffect(() => blink.auth.onAuthStateChanged((state) => {
-    setCurrentUser(state.user)
-    if (state.user) rolesTable.list({ where: { userId: state.user.id }, limit: 1 }).then(rows => setAccessLevel(rows[0]?.role || 'user')).catch(() => setAccessLevel('user'))
-  }), [rolesTable])
+  // useEffect(() => blink.auth.onAuthStateChanged((state) => {
+  //   setCurrentUser(state.user)
+  //   if (state.user) rolesTable.list({ where: { userId: state.user.id }, limit: 1 }).then(rows => setAccessLevel(rows[0]?.role || 'user')).catch(() => setAccessLevel('user'))
+  // }), [rolesTable])
 
   // SSR always renders expanded; the saved preference is restored after mount.
   // Reading localStorage in the initializer makes the client's first render
@@ -115,7 +111,7 @@ export function AppSidebarShell() {
     <TooltipProvider delayDuration={0}>
       <div
         className={cn(
-          'flex flex-col h-full bg-background border-r border-border overflow-hidden',
+          'sticky top-0 flex h-dvh flex-col bg-background border-r border-border overflow-hidden',
           'transition-[width] duration-200 ease-linear shrink-0',
           collapsed ? 'w-[3rem]' : 'w-[15rem]'
         )}
@@ -170,68 +166,6 @@ export function AppSidebarShell() {
         </div>
 
         {/* ── Footer (always pinned to bottom) ──────────── */}
-        <div
-          className={cn(
-            'shrink-0 border-t border-border',
-            collapsed ? 'flex flex-col items-center gap-1 p-2' : 'p-3 space-y-1'
-          )}
-        >
-          {/* User row */}
-          {collapsed ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <a href="/app/profile" className="flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors cursor-pointer">
-                  <Avatar className="h-6 w-6 shrink-0">
-                    <AvatarFallback className="text-[10px] bg-muted">U</AvatarFallback>
-                  </Avatar>
-                </a>
-              </TooltipTrigger>
-              <TooltipContent side="right">{currentUser?.displayName || currentUser?.email || 'Officer'} · {ACCESS_LABELS[accessLevel]}</TooltipContent>
-            </Tooltip>
-          ) : (
-            <a href="/app/profile" className="flex items-center gap-2 rounded-md hover:bg-accent transition-colors cursor-pointer w-full px-2 py-1.5">
-              <Avatar className="h-6 w-6 shrink-0">
-                <AvatarFallback className="text-[10px] bg-muted">U</AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0 text-left">
-                <p className="text-xs font-medium leading-tight truncate">{currentUser?.displayName || 'Officer'}</p>
-                <p className="text-[10px] text-muted-foreground leading-tight truncate">
-                  {currentUser?.email || 'Authenticated user'} · {ACCESS_LABELS[accessLevel]}
-                </p>
-              </div>
-            </a>
-          )}
-
-          {/* Sign out */}
-          {collapsed ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  aria-label="Sign out"
-                  onClick={() => blink.auth.logout()}
-                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                >
-                  <LogOut className="h-4 w-4 shrink-0" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right">Sign out</TooltipContent>
-            </Tooltip>
-          ) : (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => blink.auth.logout()}
-              className="w-full justify-start px-2 gap-2 text-muted-foreground hover:text-foreground"
-            >
-              <LogOut className="h-4 w-4 shrink-0" />
-              Sign out
-            </Button>
-          )}
-        </div>
       </div>
     </TooltipProvider>
   )
