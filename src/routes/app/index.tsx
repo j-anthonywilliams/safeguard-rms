@@ -10,6 +10,7 @@ import { AlertTriangle, Archive, ArrowUpRight, Check, ClipboardPlus, Clock3, Cro
 import { ACCESS_LABELS, canCreateRecords } from '@/lib/access-control'
 import type { AttendanceLogsRow } from '@/lib/db-types'
 import type { AccessLevel } from '@/lib/access-control'
+import { getDevAccount } from '@/lib/dev-accounts'
 
 interface Incident { id: string; userId: string; reportNumber: string; incidentDate: string; location: string; city: string; state: string; zipCode: string; subjectName: string; subjectPhone?: string; subjectDob?: string; violentFlag: string | number; banBarFlag: string | number; incidentCodes: string; disposition: string; narrative: string; approvalStatus: 'Pending' | 'Approved' | 'Rejected'; approvedBy?: string | null; approvedAt?: string | null; reviewFeedback?: string | null; reviewedBy?: string | null; reviewedAt?: string | null; createdAt: string; caseFileId?: string | null; parentIncidentId?: string | null; reportType?: string }
 interface CaseFile { id: string; userId: string; caseNumber: string; title: string; status: string; leadOfficer?: string | null; createdAt: string; updatedAt: string }
@@ -65,9 +66,49 @@ function DashboardHome() {
   const rolesTable = useMemo(() => blink.db.table<AppRole>('app_roles'), [])
   const usersTable = useMemo(() => blink.db.table<{ id: string; email: string; displayName?: string | null }>('users'), [])
 
-  useEffect(() => blink.auth.onAuthStateChanged((state) => { setUser(state.user); if (!state.isLoading) { setAuthLoading(false); setAuthReady(true) } }), [])
+  useEffect(() => {
+  const devAccount = getDevAccount()
+
+  if (devAccount) {
+    setUser({
+      id: devAccount.id,
+      email: devAccount.email,
+      displayName: devAccount.displayName,
+    })
+    setAccessLevel(devAccount.role)
+    setAuthLoading(false)
+    setAuthReady(true)
+    return
+  }
+
+  return blink.auth.onAuthStateChanged((state) => {
+    setUser(state.user)
+
+    if (!state.isLoading) {
+      setAuthLoading(false)
+      setAuthReady(true)
+    }
+  })
+}, [])
   useEffect(() => { const saved = localStorage.getItem('safeguard-theme') === 'dark'; document.documentElement.classList.toggle('dark', saved); setTimeout(() => setDark(saved), 0) }, [])
-  useEffect(() => { if (!user) return; rolesTable.list({ where: { userId: user.id }, limit: 1 }).then(rows => setAccessLevel(rows[0]?.role || 'user')).catch(() => setAccessLevel('user')) }, [user, rolesTable])
+  useEffect(() => {
+  if (!user) return
+
+  const devAccount = getDevAccount()
+
+  if (devAccount && user.id === devAccount.id) {
+    setAccessLevel(devAccount.role)
+    return
+  }
+
+  rolesTable
+    .list({
+      where: { userId: user.id },
+      limit: 1,
+    })
+    .then(rows => setAccessLevel(rows[0]?.role || 'user'))
+    .catch(() => setAccessLevel('user'))
+}, [user, rolesTable])
   useEffect(() => { if (!user) return; usersTable.list({ orderBy: { createdAt: 'asc' }, limit: 100 }).then(setDirectoryUsers).catch(() => setDirectoryUsers([])) }, [user, usersTable])
   useEffect(() => { if (!user) return; const loadRecords = async () => {
     try {
