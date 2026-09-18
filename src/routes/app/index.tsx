@@ -711,7 +711,8 @@ return (
 )}
 
 <DevAccountSwitcher />
-</div>
+  </div>
+)
 }
 
 function Metric({ icon, label, value, detail, accent }: { icon: React.ReactNode; label: string; value: string; detail: string; accent: string }) { return <Card className="relative overflow-hidden transition-transform duration-200 hover:-translate-y-0.5"><div className={`absolute inset-y-0 left-0 w-1 ${accent}`} /><CardContent className="p-5"><div className="mb-4 flex items-center justify-between"><span className="text-muted-foreground">{icon}</span><span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Live</span></div><p className="text-3xl font-semibold tracking-tight">{value}</p><p className="mt-1 text-sm font-medium">{label}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></CardContent></Card> }

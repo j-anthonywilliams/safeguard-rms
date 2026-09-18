@@ -1,15 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { blink } from '@/blink/client'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { ACCESS_LABELS } from '@/lib/access-control'
 import type { AccessLevel } from '@/lib/access-control'
 import { getDevAccount } from '@/lib/dev-accounts'
@@ -31,6 +23,9 @@ export function UserAccountMenu() {
   } | null>(null)
 
   const [accessLevel, setAccessLevel] = useState<AccessLevel>('user')
+  const [open, setOpen] = useState(false)
+
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const rolesTable = useMemo(
     () => blink.db.table<AppRole>('app_roles'),
@@ -68,75 +63,110 @@ export function UserAccountMenu() {
     })
   }, [rolesTable])
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(event.target as Node)
+      ) {
+        setOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
   const displayName = user?.displayName || user?.email || 'Officer'
   const initials = displayName.slice(0, 2).toUpperCase()
 
   const signOut = async () => {
+    setOpen(false)
     await blink.auth.logout()
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          className="flex h-auto items-center gap-2 px-2 py-1.5"
-        >
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="text-xs bg-muted">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
+    <div ref={menuRef} className="relative">
+      <Button
+        variant="ghost"
+        type="button"
+        onClick={() => setOpen(value => !value)}
+        className="flex h-auto items-center gap-2 px-2 py-1.5"
+        aria-expanded={open}
+        aria-haspopup="menu"
+      >
+        <Avatar className="h-8 w-8">
+          <AvatarFallback className="bg-muted text-xs">
+            {initials}
+          </AvatarFallback>
+        </Avatar>
 
-          <div className="hidden min-w-0 text-left sm:block">
-            <p className="max-w-40 truncate text-xs font-medium">
+        <div className="hidden min-w-0 text-left sm:block">
+          <p className="max-w-40 truncate text-xs font-medium">
+            {displayName}
+          </p>
+
+          <p className="text-[10px] text-muted-foreground">
+            {ACCESS_LABELS[accessLevel]} access
+          </p>
+        </div>
+      </Button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-50 mt-2 w-60 rounded-lg border border-border bg-card p-1 text-card-foreground shadow-lg"
+        >
+          <div className="border-b border-border px-3 py-2">
+            <p className="text-sm font-medium">
               {displayName}
             </p>
-            <p className="text-[10px] text-muted-foreground">
+
+            <p className="truncate text-xs text-muted-foreground">
+              {user?.email || ''}
+            </p>
+
+            <p className="mt-1 text-xs text-muted-foreground">
               {ACCESS_LABELS[accessLevel]} access
             </p>
           </div>
-        </Button>
-      </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel>
-          <div className="flex flex-col">
-            <span>{displayName}</span>
-
-            <span className="font-normal text-muted-foreground">
-              {user?.email || ''}
-            </span>
-
-            <span className="mt-1 font-normal text-muted-foreground">
-              {ACCESS_LABELS[accessLevel]} access
-            </span>
-          </div>
-        </DropdownMenuLabel>
-
-        <DropdownMenuSeparator />
-
-        <DropdownMenuItem asChild>
-          <a href="/app/profile">
-            <UserRound className="mr-2 h-4 w-4" />
+          <a
+            href="/app/profile"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+          >
+            <UserRound className="h-4 w-4" />
             My profile
           </a>
-        </DropdownMenuItem>
 
-        <DropdownMenuItem asChild>
-          <a href="/app/profile">
-            <Settings className="mr-2 h-4 w-4" />
+          <a
+            href="/app/profile"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+          >
+            <Settings className="h-4 w-4" />
             Account settings
           </a>
-        </DropdownMenuItem>
 
-        <DropdownMenuSeparator />
+          <div className="my-1 border-t border-border" />
 
-        <DropdownMenuItem onClick={signOut}>
-          <LogOut className="mr-2 h-4 w-4" />
-          Sign out
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={signOut}
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <LogOut className="h-4 w-4" />
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
   )
 }

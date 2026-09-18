@@ -28,8 +28,9 @@ import {
   Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { ACCESS_LABELS, canManageUsers } from '@/lib/access-control'
 import type { AccessLevel } from '@/lib/access-control'
+import { canManageUsers } from '@/lib/access-control'
+import { getDevAccount } from '@/lib/dev-accounts'
 
 const SIDEBAR_KEY = 'sidebar_collapsed'
 
@@ -81,14 +82,36 @@ function NavItem({ item, collapsed }: { item: NavItemDef; collapsed: boolean }) 
 }
 
 export function AppSidebarShell() {
-  // const [currentUser, setCurrentUser] = useState<{ id: string; email?: string; displayName?: string } | null>(null)
-  // const [accessLevel, setAccessLevel] = useState<AccessLevel>('user')
-  // const rolesTable = useMemo(() => blink.db.table<AppRole>('app_roles'), [])
+  const [accessLevel, setAccessLevel] = useState<AccessLevel>('user')
 
-  // useEffect(() => blink.auth.onAuthStateChanged((state) => {
-  //   setCurrentUser(state.user)
-  //   if (state.user) rolesTable.list({ where: { userId: state.user.id }, limit: 1 }).then(rows => setAccessLevel(rows[0]?.role || 'user')).catch(() => setAccessLevel('user'))
-  // }), [rolesTable])
+  const rolesTable = useMemo(
+    () => blink.db.table<AppRole>('app_roles'),
+    []
+  )
+
+  useEffect(() => {
+    const devAccount = getDevAccount()
+
+    if (devAccount) {
+      setAccessLevel(devAccount.role)
+      return
+    }
+
+    return blink.auth.onAuthStateChanged((state) => {
+      if (!state.user) {
+        setAccessLevel('user')
+        return
+      }
+
+      rolesTable
+        .list({
+          where: { userId: state.user.id },
+          limit: 1,
+        })
+        .then(rows => setAccessLevel(rows[0]?.role || 'user'))
+        .catch(() => setAccessLevel('user'))
+    })
+  }, [rolesTable])
 
   // SSR always renders expanded; the saved preference is restored after mount.
   // Reading localStorage in the initializer makes the client's first render
@@ -154,7 +177,7 @@ export function AppSidebarShell() {
         </div>
 
         {/* ── Nav (only this section scrolls) ───────────── */}
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-2 py-2 space-y-0.5">
+        <div className="flex-1 min-h-0 overflow-hidden px-2 py-2 space-y-0.5">
           {!collapsed && (
             <p className="px-3 pt-1 pb-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
               Main
