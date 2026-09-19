@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   DEV_ACCOUNTS,
   getDevAccount,
@@ -6,12 +7,19 @@ import {
 } from '@/lib/dev-accounts'
 import { Button } from '@/components/ui/button'
 import { ACCESS_LABELS } from '@/lib/access-control'
-import { ShieldCheck, LogIn, X } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronUp,
+  LogIn,
+  ShieldCheck,
+  X,
+} from 'lucide-react'
 
 export function DevAccountSwitcher() {
   if (!import.meta.env.DEV) return null
 
   const activeAccount = getDevAccount()
+  const [minimized, setMinimized] = useState(true)
 
   const switchAccount = (accountId: string) => {
     const account = DEV_ACCOUNTS.find(item => item.id === accountId)
@@ -32,19 +40,63 @@ export function DevAccountSwitcher() {
     window.location.reload()
   }
 
+  if (minimized) {
+    return (
+      <div className="fixed bottom-4 right-4 z-[100]">
+        <Button
+          type="button"
+          variant="outline"
+          className="gap-2 bg-card shadow-lg"
+          onClick={() => setMinimized(false)}
+        >
+          <ShieldCheck className="size-4" />
+
+          {activeAccount ? (
+            <>
+              <span>{ACCESS_LABELS[activeAccount.role]}</span>
+              <span className="text-[10px] text-muted-foreground">
+                DEV
+              </span>
+            </>
+          ) : (
+            <span>Development</span>
+          )}
+
+          <ChevronUp className="size-3.5" />
+        </Button>
+      </div>
+    )
+  }
+
   return (
     <div className="fixed bottom-4 right-4 z-[100] w-80 rounded-xl border border-border bg-card p-4 text-card-foreground shadow-xl">
-      <div className="mb-3 flex items-center gap-2">
-        <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <ShieldCheck className="size-4" />
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <ShieldCheck className="size-4" />
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold">
+              Development Mode
+            </p>
+
+            <p className="text-xs text-muted-foreground">
+              Switch simulated permission levels.
+            </p>
+          </div>
         </div>
 
-        <div>
-          <p className="text-sm font-semibold">Development Mode</p>
-          <p className="text-xs text-muted-foreground">
-            Switch permission levels without signing in.
-          </p>
-        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          onClick={() => setMinimized(true)}
+          aria-label="Minimize development menu"
+        >
+          <ChevronDown className="size-4" />
+        </Button>
       </div>
 
       {activeAccount && (
@@ -58,7 +110,7 @@ export function DevAccountSwitcher() {
           </p>
 
           <p className="text-xs text-muted-foreground">
-            {ACCESS_LABELS[activeAccount.role]}
+            {ACCESS_LABELS[activeAccount.role]} access
           </p>
         </div>
       )}
