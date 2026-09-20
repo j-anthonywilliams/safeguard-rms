@@ -6,6 +6,7 @@ import { ACCESS_LABELS } from '@/lib/access-control'
 import type { AccessLevel } from '@/lib/access-control'
 import { getDevRole } from '@/lib/dev-accounts'
 import { LogOut, Settings, UserRound } from 'lucide-react'
+import { reconcileCurrentUser } from '@/lib/user-provisioning'
 
 interface AppRole {
   id: string
@@ -43,22 +44,34 @@ export function UserAccountMenu() {
         return
       }
 
-      const devRole = getDevRole()
+      const initializeUser = async () => {
+        try {
+          const reconciledRole = await reconcileCurrentUser()
 
-      if (devRole) {
-        setAccessLevel(devRole)
-        return
+          const devRole = getDevRole()
+
+          if (devRole) {
+            setAccessLevel(devRole)
+            return
+          }
+
+          if (reconciledRole) {
+            setAccessLevel(reconciledRole)
+            return
+          }
+
+          const rows = await rolesTable.list({
+            where: { userId: state.user.id },
+            limit: 1,
+          })
+
+          setAccessLevel(rows[0]?.role || 'user')
+        } catch {
+          setAccessLevel('user')
+        }
       }
 
-      rolesTable
-        .list({
-          where: { userId: state.user.id },
-          limit: 1,
-        })
-        .then(rows =>
-          setAccessLevel(rows[0]?.role || 'user')
-        )
-        .catch(() => setAccessLevel('user'))
+      initializeUser()
     })
   }, [rolesTable])
 
