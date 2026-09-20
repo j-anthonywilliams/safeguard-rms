@@ -338,16 +338,16 @@ function UserManagementPage() {
         description:
           `${user.displayName || user.email} is now ${ACCESS_LABELS[targetRole]}.`,
       })
-    } catch (error) {
-      toast.error('Could not update permissions', {
-        description:
-          error instanceof Error
-            ? error.message
-            : 'Please try again.',
-      })
-    } finally {
-      setBusy(false)
-    }
+      } catch (error) {
+        console.error('UPDATE ROLE ERROR:', error)
+
+        toast.error('Could not update permissions', {
+          description:
+            error instanceof Error
+              ? error.message
+              : JSON.stringify(error),
+        })
+      }
   }
 
   const createInvitation = async () => {
