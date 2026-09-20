@@ -12,3 +12,5 @@ export const ACCESS_LABELS: Record<AccessLevel, string> = {
 
 export const canCreateRecords = (level: AccessLevel) => level !== 'support'
 export const canManageUsers = (level: AccessLevel) => ['admin', 'support', 'backend'].includes(level)
+export const canEditSchedule = (level: AccessLevel) =>
+  ['supervisor', 'admin', 'support', 'backend'].includes(level)

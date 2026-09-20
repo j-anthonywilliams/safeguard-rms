@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/tooltip'
 import {
   Archive,
+  CalendarDays,
   ClipboardPlus,
   LayoutDashboard,
   Package,
@@ -54,6 +55,9 @@ const NAV_ITEMS: NavItemDef[] = [
   { href: '/app#equipment', icon: <Package className="h-4 w-4" />, label: 'Equipment desk' },
   { href: '/app#evidence', icon: <Archive className="h-4 w-4" />, label: 'Property & evidence' },
   { href: '/app/users', icon: <Users className="h-4 w-4" />, label: 'User management', requiresManagement: true },
+  { href: '/app/scheduler',
+  icon: <CalendarDays className="h-4 w-4" />,
+  label: 'Scheduler',},
 ]
 
 function NavItem({ item, collapsed }: { item: NavItemDef; collapsed: boolean }) {
