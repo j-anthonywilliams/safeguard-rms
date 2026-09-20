@@ -712,9 +712,14 @@ function ActionCard({ icon, title, description, action, onClick, children }: { i
 function LoginGate() {
   const [busy, setBusy] = useState(false)
 
-  const openSignIn = () => {
-    setBusy(true)
-    blink.auth.login('/app')
+  const signInWithGoogle = async () => {
+    try {
+      setBusy(true)
+      await blink.auth.signIn('google')
+    } catch (error) {
+      console.error('Google sign-in failed:', error)
+      setBusy(false)
+    }
   }
 
   return (
@@ -739,7 +744,7 @@ function LoginGate() {
           Use the secure SafeGuard sign-in to access the records desk.
         </p>
 
-        <Button
+        {/* <Button
           className="mt-7 w-full"
           size="lg"
           onClick={openSignIn}
@@ -747,7 +752,7 @@ function LoginGate() {
         >
           {busy ? 'Opening secure sign-in…' : 'Continue to secure sign-in'}
           <ArrowUpRight className="size-4" />
-        </Button>
+        </Button> */}
 
         <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
           <div className="h-px flex-1 bg-border" />
@@ -760,7 +765,7 @@ function LoginGate() {
           size="lg"
           variant="outline"
           type="button"
-          onClick={openSignIn}
+          onClick={signInWithGoogle}
           disabled={busy}
         >
           <span className="font-semibold">G</span>
