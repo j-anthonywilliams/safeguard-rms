@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { ACCESS_LABELS, canEditSchedule } from '@/lib/access-control'
 import type { AccessLevel } from '@/lib/access-control'
-import { getDevAccount } from '@/lib/dev-accounts'
+import { getDevRole } from '@/lib/dev-accounts'
 
 interface AppRole {
   id: string
@@ -151,6 +151,7 @@ function SchedulerPage() {
     useState<PtoRequest | null>(null)
 
   const [loading, setLoading] = useState(true)
+  const [authLoading, setAuthLoading] = useState(true)
 
   const rolesTable = useMemo(
     () => blink.db.table<AppRole>('app_roles'),
@@ -173,36 +174,33 @@ function SchedulerPage() {
   )
 
   useEffect(() => {
-    const devAccount = getDevAccount()
+  return blink.auth.onAuthStateChanged(state => {
+    setUser(state.user)
 
-    if (devAccount) {
-      setUser({
-        id: devAccount.id,
-        email: devAccount.email,
-        displayName: devAccount.displayName,
-      })
+    if (!state.isLoading) {
+      setAuthLoading(false)
+    }
+  })
+}, [])
 
-      setAccessLevel(devAccount.role)
+  useEffect(() => {
+    if (!user) return
+
+    const devRole = getDevRole()
+
+    if (devRole) {
+      setAccessLevel(devRole)
       return
     }
 
-    return blink.auth.onAuthStateChanged(state => {
-      setUser(state.user)
-
-      if (!state.user) {
-        setAccessLevel('user')
-        return
-      }
-
-      rolesTable
-        .list({
-          where: { userId: state.user.id },
-          limit: 1,
-        })
-        .then(rows => setAccessLevel(rows[0]?.role || 'user'))
-        .catch(() => setAccessLevel('user'))
-    })
-  }, [rolesTable])
+    rolesTable
+      .list({
+        where: { userId: user.id },
+        limit: 1,
+      })
+      .then(rows => setAccessLevel(rows[0]?.role || 'user'))
+      .catch(() => setAccessLevel('user'))
+  }, [user, rolesTable])
 
   useEffect(() => {
     if (!user) return
@@ -430,7 +428,7 @@ function SchedulerPage() {
     }
   }
 
-  if (!user || loading) {
+  if (authLoading || !user || loading) {
     return (
       <div className="flex min-h-dvh items-center justify-center">
         <p className="text-sm text-muted-foreground">

@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { ACCESS_LABELS } from '@/lib/access-control'
 import type { AccessLevel } from '@/lib/access-control'
-import { getDevAccount } from '@/lib/dev-accounts'
+import { getDevRole } from '@/lib/dev-accounts'
 import { LogOut, Settings, UserRound } from 'lucide-react'
 
 interface AppRole {
@@ -22,7 +22,9 @@ export function UserAccountMenu() {
     displayName?: string
   } | null>(null)
 
-  const [accessLevel, setAccessLevel] = useState<AccessLevel>('user')
+  const [accessLevel, setAccessLevel] =
+    useState<AccessLevel>('user')
+
   const [open, setOpen] = useState(false)
 
   const menuRef = useRef<HTMLDivElement>(null)
@@ -33,18 +35,6 @@ export function UserAccountMenu() {
   )
 
   useEffect(() => {
-    const devAccount = getDevAccount()
-
-    if (devAccount) {
-      setUser({
-        id: devAccount.id,
-        email: devAccount.email,
-        displayName: devAccount.displayName,
-      })
-      setAccessLevel(devAccount.role)
-      return
-    }
-
     return blink.auth.onAuthStateChanged((state) => {
       setUser(state.user)
 
@@ -53,12 +43,21 @@ export function UserAccountMenu() {
         return
       }
 
+      const devRole = getDevRole()
+
+      if (devRole) {
+        setAccessLevel(devRole)
+        return
+      }
+
       rolesTable
         .list({
           where: { userId: state.user.id },
           limit: 1,
         })
-        .then(rows => setAccessLevel(rows[0]?.role || 'user'))
+        .then(rows =>
+          setAccessLevel(rows[0]?.role || 'user')
+        )
         .catch(() => setAccessLevel('user'))
     })
   }, [rolesTable])
@@ -76,12 +75,19 @@ export function UserAccountMenu() {
     document.addEventListener('mousedown', handleClickOutside)
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener(
+        'mousedown',
+        handleClickOutside
+      )
     }
   }, [])
 
-  const displayName = user?.displayName || user?.email || 'Officer'
-  const initials = displayName.slice(0, 2).toUpperCase()
+  const displayName =
+    user?.displayName || user?.email || 'Officer'
+
+  const initials = displayName
+    .slice(0, 2)
+    .toUpperCase()
 
   const signOut = async () => {
     setOpen(false)

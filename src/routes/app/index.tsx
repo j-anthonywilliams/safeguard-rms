@@ -10,7 +10,7 @@ import { AlertTriangle, Archive, ArrowUpRight, Check, ClipboardPlus, Clock3, Cro
 import { ACCESS_LABELS, canCreateRecords } from '@/lib/access-control'
 import type { AttendanceLogsRow } from '@/lib/db-types'
 import type { AccessLevel } from '@/lib/access-control'
-import { getDevAccount } from '@/lib/dev-accounts'
+import { getDevRole } from '@/lib/dev-accounts'
 import { DevAccountSwitcher } from '@/components/DevAccountSwitcher'
 import { UserAccountMenu } from '@/components/UserAccountMenu'
 
@@ -69,20 +69,6 @@ function DashboardHome() {
   const usersTable = useMemo(() => blink.db.table<{ id: string; email: string; displayName?: string | null }>('users'), [])
 
   useEffect(() => {
-  const devAccount = getDevAccount()
-
-  if (devAccount) {
-    setUser({
-      id: devAccount.id,
-      email: devAccount.email,
-      displayName: devAccount.displayName,
-    })
-    setAccessLevel(devAccount.role)
-    setAuthLoading(false)
-    setAuthReady(true)
-    return
-  }
-
   return blink.auth.onAuthStateChanged((state) => {
     setUser(state.user)
 
@@ -92,14 +78,17 @@ function DashboardHome() {
     }
   })
 }, [])
-  useEffect(() => { const saved = localStorage.getItem('safeguard-theme') === 'dark'; document.documentElement.classList.toggle('dark', saved); setTimeout(() => setDark(saved), 0) }, [])
+
+  useEffect(() => { 
+  const saved = localStorage.getItem('safeguard-theme') === 'dark'; document.documentElement.classList.toggle('dark', saved); setTimeout(() => setDark(saved), 0) }, [])
+  
   useEffect(() => {
   if (!user) return
 
-  const devAccount = getDevAccount()
+  const devRole = getDevRole()
 
-  if (devAccount && user.id === devAccount.id) {
-    setAccessLevel(devAccount.role)
+  if (devRole) {
+    setAccessLevel(devRole)
     return
   }
 
@@ -111,6 +100,7 @@ function DashboardHome() {
     .then(rows => setAccessLevel(rows[0]?.role || 'user'))
     .catch(() => setAccessLevel('user'))
 }, [user, rolesTable])
+
   useEffect(() => { if (!user) return; usersTable.list({ orderBy: { createdAt: 'asc' }, limit: 100 }).then(setDirectoryUsers).catch(() => setDirectoryUsers([])) }, [user, usersTable])
   useEffect(() => { if (!user) return; const loadRecords = async () => {
     try {

@@ -1,60 +1,55 @@
 import type { AccessLevel } from '@/lib/access-control'
 
-export interface DevAccount {
-  id: string
-  email: string
-  displayName: string
+export interface DevRole {
   role: AccessLevel
+  label: string
 }
 
-export const DEV_ACCOUNTS: DevAccount[] = [
+export const DEV_ROLES: DevRole[] = [
   {
-    id: 'dev-user',
-    email: 'user@safeguard.local',
-    displayName: 'Development User',
     role: 'user',
+    label: 'User',
   },
   {
-    id: 'dev-supervisor',
-    email: 'supervisor@safeguard.local',
-    displayName: 'Development Supervisor',
     role: 'supervisor',
+    label: 'Supervisor',
   },
   {
-    id: 'dev-admin',
-    email: 'admin@safeguard.local',
-    displayName: 'Development Administrator',
     role: 'admin',
+    label: 'Admin',
   },
   {
-    id: 'dev-support',
-    email: 'support@safeguard.local',
-    displayName: 'Development Support',
     role: 'support',
+    label: 'Support',
   },
   {
-    id: 'dev-backend',
-    email: 'backend@safeguard.local',
-    displayName: 'Development Backend',
     role: 'backend',
+    label: 'Backend',
   },
 ]
 
-const DEV_SESSION_KEY = 'safeguard-dev-account'
+const DEV_ROLE_KEY = 'safeguard-dev-role'
 
-export function getDevAccount(): DevAccount | null {
+export function getDevRole(): AccessLevel | null {
   if (!import.meta.env.DEV) return null
 
-  const id = localStorage.getItem(DEV_SESSION_KEY)
-  if (!id) return null
+  const role = localStorage.getItem(DEV_ROLE_KEY)
 
-  return DEV_ACCOUNTS.find(account => account.id === id) ?? null
+  if (!role) return null
+
+  const validRole = DEV_ROLES.some(
+    item => item.role === role
+  )
+
+  return validRole ? (role as AccessLevel) : null
 }
 
-export function setDevAccount(account: DevAccount) {
-  localStorage.setItem(DEV_SESSION_KEY, account.id)
+export function setDevRole(role: AccessLevel) {
+  if (!import.meta.env.DEV) return
+
+  localStorage.setItem(DEV_ROLE_KEY, role)
 }
 
-export function clearDevAccount() {
-  localStorage.removeItem(DEV_SESSION_KEY)
+export function clearDevRole() {
+  localStorage.removeItem(DEV_ROLE_KEY)
 }
