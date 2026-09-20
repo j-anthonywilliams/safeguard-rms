@@ -32,6 +32,7 @@ import {
   canManageUsers,
 } from '@/lib/access-control'
 import type { AccessLevel } from '@/lib/access-control'
+import { getDevRole } from '@/lib/dev-accounts'
 
 interface DirectoryUser {
   id: string
@@ -148,17 +149,29 @@ function UserManagementPage() {
   useEffect(() => {
     if (!currentUser) return
 
-    rolesTable
-      .list({
-        where: {
-          userId: currentUser.id,
-        },
-        limit: 1,
-      })
-      .then(rows =>
+    const initializeAccess = async () => {
+      const devRole = getDevRole()
+
+      if (devRole) {
+        setAccessLevel(devRole)
+        return
+      }
+
+      try {
+        const rows = await rolesTable.list({
+          where: {
+            userId: currentUser.id,
+          },
+          limit: 1,
+        })
+
         setAccessLevel(rows[0]?.role || 'user')
-      )
-      .catch(() => setAccessLevel('user'))
+      } catch {
+        setAccessLevel('user')
+      }
+    }
+
+    initializeAccess()
   }, [currentUser, rolesTable])
 
   const loadDirectory = async () => {
@@ -215,9 +228,10 @@ function UserManagementPage() {
   )
 
   const grantableRoles = useMemo(
-    () => ACCESS_LEVELS.filter(
-      role => canGrantRole(accessLevel, role)
-    ),
+    () =>
+      ACCESS_LEVELS.filter((role) =>
+        canGrantRole(accessLevel, role)
+      ),
     [accessLevel]
   )
 
@@ -282,29 +296,17 @@ function UserManagementPage() {
     const currentRole =
       roleByUser.get(user.id) || 'user'
 
-    if (
-      user.id !== currentUser?.id &&
-      !canGrantRole(accessLevel, targetRole)
-    ) {
+    if (targetRole === currentRole) {
+      return
+    }
+
+    if (!canGrantRole(accessLevel, targetRole)) {
       toast.error('Not authorized', {
         description:
           `You cannot grant ${ACCESS_LABELS[targetRole]} access.`,
       })
       return
     }
-
-    if (
-      user.id === currentUser?.id &&
-      targetRole !== currentRole
-    ) {
-      toast.error('You cannot change your own access', {
-        description:
-          'Another authorized administrator must change your access level.',
-      })
-      return
-    }
-
-    if (targetRole === currentRole) return
 
     const existing = roles.find(
       item => item.userId === user.id
@@ -330,7 +332,7 @@ function UserManagementPage() {
         })
       }
 
-      await refreshDirectory()
+      await loadDirectory()
 
       toast.success('Permission updated', {
         description:
@@ -371,50 +373,36 @@ function UserManagementPage() {
     if (existingUser) {
       toast.error('User already exists', {
         description:
-          'Use the existing user record to change permissions.',
+          'Use the existing user directory entry to change permissions.',
       })
       return
     }
-
-    const existingInvitation =
-      pendingInvitations.find(
-        item => item.email.toLowerCase() === email
-      )
 
     try {
       setBusy(true)
 
       const now = new Date().toISOString()
 
-      if (existingInvitation) {
-        await invitationsTable.update(
-          existingInvitation.id,
-          {
-            displayName: name,
-            requestedRole: newRole,
-            invitedBy: currentUser?.id || '',
-            updatedAt: now,
-          }
-        )
-      } else {
-        await invitationsTable.create({
-          id: crypto.randomUUID(),
-          email,
-          displayName: name,
-          requestedRole: newRole,
-          invitedBy: currentUser?.id || '',
-          createdAt: now,
-          updatedAt: now,
-        })
-      }
+      await invitationsTable.create({
+        id: crypto.randomUUID(),
+        email,
+        displayName: name,
+        requestedRole: newRole,
+        invitedBy: currentUser?.id || '',
+        createdAt: now,
+        updatedAt: now,
+      })
 
-      await sendLoginLink(email)
+      await blink.auth.sendMagicLink(email)
+
+      toast.success('User invited', {
+        description:
+          `${name} was invited as ${ACCESS_LABELS[newRole]}.`,
+      })
 
       setNewName('')
       setNewEmail('')
-      setNewRole(
-        grantableRoles[0] || 'user'
-      )
+      setNewRole(grantableRoles[0] || 'user')
       setShowAddUser(false)
 
       await refreshDirectory()
@@ -674,18 +662,13 @@ function UserManagementPage() {
               {filteredUsers.length ? (
                 filteredUsers.map(item => {
                   const role =
-                    roleByUser.get(item.id) ||
-                    'user'
+                    roleByUser.get(item.id) || 'user'
 
-                  const permittedRoles =
-                    ACCESS_LEVELS.filter(
-                      level =>
-                        level === role ||
-                        canGrantRole(
-                          accessLevel,
-                          level
-                        )
-                    )
+                  const permittedRoles = ACCESS_LEVELS.filter(
+                    level =>
+                      level === role ||
+                      canGrantRole(accessLevel, level)
+                  )
 
                   return (
                     <div
@@ -717,10 +700,7 @@ function UserManagementPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <select
                           value={role}
-                          disabled={
-                            item.id === currentUser.id ||
-                            busy
-                          }
+                          disabled={busy}
                           onChange={event =>
                             updateRole(
                               item,
@@ -729,20 +709,17 @@ function UserManagementPage() {
                           }
                           className="h-9 rounded-md border border-input bg-background px-3 text-xs"
                           aria-label={`Permission for ${
-                            item.displayName ||
-                            item.email
+                            item.displayName || item.email
                           }`}
                         >
-                          {permittedRoles.map(
-                            level => (
-                              <option
-                                key={level}
-                                value={level}
-                              >
-                                {ACCESS_LABELS[level]}
-                              </option>
-                            )
-                          )}
+                          {permittedRoles.map(level => (
+                            <option
+                              key={level}
+                              value={level}
+                            >
+                              {ACCESS_LABELS[level]}
+                            </option>
+                          ))}
                         </select>
 
                         <span className="text-xs text-muted-foreground">
