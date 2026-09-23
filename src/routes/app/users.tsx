@@ -42,6 +42,9 @@ interface DirectoryUser {
   emailVerified?: string | number
   lastSignIn?: string | null
   createdAt: string
+  isArchived?: number
+  archivedAt?: string | null
+  archivedBy?: string | null
 }
 
 interface AppRole {
@@ -96,53 +99,25 @@ function UserManagementPage() {
     displayName?: string
     email?: string
   } | null>(null)
-
-  const [accessLevel, setAccessLevel] =
-    useState<AccessLevel>('user')
-
+  const [accessLevel, setAccessLevel] = useState<AccessLevel>('user')
   const [authLoading, setAuthLoading] = useState(true)
   const [users, setUsers] = useState<DirectoryUser[]>([])
   const [roles, setRoles] = useState<AppRole[]>([])
-  const [pendingInvitations, setPendingInvitations] =
-    useState<PendingInvitation[]>([])
-
+  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([])
   const [search, setSearch] = useState('')
-
-  const [showAddUser, setShowAddUser] =
-    useState(false)
-
+  const [showAddUser, setShowAddUser] = useState(false)
   const [newName, setNewName] = useState('')
   const [newEmail, setNewEmail] = useState('')
-  const [newRole, setNewRole] =
-    useState<AccessLevel>('user')
-
+  const [newRole, setNewRole] = useState<AccessLevel>('user')
+  const [showArchived, setShowArchived] = useState(false)
   const [busy, setBusy] = useState(false)
-
-  // ADD THESE HERE
-  const [editingUser, setEditingUser] =
-    useState<DirectoryUser | null>(null)
-
+  const [editingUser, setEditingUser] = useState<DirectoryUser | null>(null)
   const [editName, setEditName] = useState('')
   const [editPhone, setEditPhone] = useState('')
   const [savingProfile, setSavingProfile] = useState(false)
-
-  const usersTable = useMemo(
-    () => blink.db.table<DirectoryUser>('users'),
-    []
-  )
-
-  const rolesTable = useMemo(
-    () => blink.db.table<AppRole>('app_roles'),
-    []
-  )
-
-  const invitationsTable = useMemo(
-    () =>
-      blink.db.table<PendingInvitation>(
-        'pending_user_invitations'
-      ),
-    []
-  )
+  const usersTable = useMemo(() => blink.db.table<DirectoryUser>('users'), [])
+  const rolesTable = useMemo(() => blink.db.table<AppRole>('app_roles'), [])
+  const invitationsTable = useMemo(() => blink.db.table<PendingInvitation>('pending_user_invitations'), [])
 
   useEffect(() => {
     return blink.auth.onAuthStateChanged((state) => {
@@ -255,13 +230,19 @@ function UserManagementPage() {
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase()
 
-    return users.filter(item =>
-      !query ||
-      `${item.displayName || ''} ${item.email}`
-        .toLowerCase()
-        .includes(query)
-    )
-  }, [search, users])
+    return users
+      .filter(item =>
+        showArchived
+          ? Number(item.isArchived) === 1
+          : Number(item.isArchived) !== 1
+      )
+      .filter(item =>
+        !query ||
+        `${item.displayName || ''} ${item.email}`
+          .toLowerCase()
+          .includes(query)
+      )
+  }, [search, users, showArchived])
 
   const refreshDirectory = async () => {
     try {
@@ -399,6 +380,109 @@ function UserManagementPage() {
     }
   }
 
+  const archiveUser = async (user: DirectoryUser) => {
+    if (user.id === currentUser?.id) {
+      toast.error('You cannot archive your own account')
+      return
+    }
+
+    try {
+      setBusy(true)
+
+      const now = new Date().toISOString()
+
+      await usersTable.update(user.id, {
+        isArchived: 1,
+        archivedAt: now,
+        archivedBy: currentUser?.id || null,
+        updatedAt: now,
+      })
+
+      await loadDirectory()
+
+      toast.success('User archived', {
+        description:
+          `${user.displayName || user.email} was moved to Archived Users.`,
+      })
+    } catch (error) {
+      toast.error('Could not archive user', {
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Please try again.',
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const restoreUser = async (user: DirectoryUser) => {
+    try {
+      setBusy(true)
+
+      await usersTable.update(user.id, {
+        isArchived: 0,
+        archivedAt: null,
+        archivedBy: null,
+        updatedAt: new Date().toISOString(),
+      })
+
+      await loadDirectory()
+
+      toast.success('User restored')
+    } catch (error) {
+      toast.error('Could not restore user', {
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Please try again.',
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const deleteArchivedUser = async (
+    user: DirectoryUser
+  ) => {
+    if (Number(user.isArchived) !== 1) {
+      toast.error('User must be archived first')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Permanently delete ${user.displayName || user.email}? This cannot be undone.`
+    )
+
+    if (!confirmed) return
+
+    try {
+      setBusy(true)
+
+      const role = roles.find(
+        item => item.userId === user.id
+      )
+
+      if (role) {
+        await rolesTable.delete(role.id)
+      }
+
+      await usersTable.delete(user.id)
+
+      await loadDirectory()
+
+      toast.success('User permanently deleted')
+    } catch (error) {
+      toast.error('Could not delete user', {
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Please try again.',
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
   const createInvitation = async () => {
     const email = newEmail.trim().toLowerCase()
     const name = newName.trim()
@@ -702,6 +786,24 @@ function UserManagementPage() {
                   placeholder="Search name or email"
                   aria-label="Search users"
                 />
+
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant={!showArchived ? 'default' : 'outline'}
+                    onClick={() => setShowArchived(false)}
+                  >
+                    Active users
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant={showArchived ? 'default' : 'outline'}
+                    onClick={() => setShowArchived(true)}
+                  >
+                    Archived users
+                  </Button>
+                </div>
               </div>
             </div>
           </CardHeader>
@@ -777,28 +879,61 @@ function UserManagementPage() {
                             : 'Unverified'}
                         </span>
 
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openEditProfile(item)}
-                          disabled={busy || savingProfile}
-                        >
-                          Edit profile
-                        </Button>
+                          {Number(item.isArchived) === 1 ? (
+                            <>
+                              <span className="rounded-md bg-muted px-3 py-2 text-xs">
+                                Archived
+                              </span>
 
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            sendLoginLink(
-                              item.email
-                            )
-                          }
-                          disabled={busy}
-                        >
-                          <LogIn className="size-3.5" />
-                          Login link
-                        </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => restoreUser(item)}
+                                disabled={busy}
+                              >
+                                Restore
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => deleteArchivedUser(item)}
+                                disabled={busy}
+                              >
+                                Delete permanently
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openEditProfile(item)}
+                                disabled={busy || savingProfile}
+                              >
+                                Edit profile
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => archiveUser(item)}
+                                disabled={busy || item.id === currentUser?.id}
+                              >
+                                Archive
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => sendLoginLink(item.email)}
+                                disabled={busy}
+                              >
+                                <LogIn className="size-3.5" />
+                                Login link
+                              </Button>
+                            </>
+                          )}
                       </div>
                     </div>
                   )
