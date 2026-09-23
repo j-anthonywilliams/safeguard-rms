@@ -13,6 +13,7 @@ import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppUsersRouteImport } from './routes/app/users'
+import { Route as AppSchedulerRouteImport } from './routes/app/scheduler'
 import { Route as AppProfileRouteImport } from './routes/app/profile'
 
 const AppRoute = AppRouteImport.update({
@@ -35,6 +36,11 @@ const AppUsersRoute = AppUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSchedulerRoute = AppSchedulerRouteImport.update({
+  id: '/scheduler',
+  path: '/scheduler',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppProfileRoute = AppProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -45,12 +51,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/app/profile': typeof AppProfileRoute
+  '/app/scheduler': typeof AppSchedulerRoute
   '/app/users': typeof AppUsersRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/app/profile': typeof AppProfileRoute
+  '/app/scheduler': typeof AppSchedulerRoute
   '/app/users': typeof AppUsersRoute
   '/app': typeof AppIndexRoute
 }
@@ -59,15 +67,24 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/app/profile': typeof AppProfileRoute
+  '/app/scheduler': typeof AppSchedulerRoute
   '/app/users': typeof AppUsersRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/app' | '/app/profile' | '/app/users' | '/app/'
+  fullPaths:
+    '/' | '/app' | '/app/profile' | '/app/scheduler' | '/app/users' | '/app/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/app/profile' | '/app/users' | '/app'
-  id: '__root__' | '/' | '/app' | '/app/profile' | '/app/users' | '/app/'
+  to: '/' | '/app/profile' | '/app/scheduler' | '/app/users' | '/app'
+  id:
+    | '__root__'
+    | '/'
+    | '/app'
+    | '/app/profile'
+    | '/app/scheduler'
+    | '/app/users'
+    | '/app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -105,6 +122,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppUsersRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/scheduler': {
+      id: '/app/scheduler'
+      path: '/scheduler'
+      fullPath: '/app/scheduler'
+      preLoaderRoute: typeof AppSchedulerRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/profile': {
       id: '/app/profile'
       path: '/profile'
@@ -117,12 +141,14 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppProfileRoute: typeof AppProfileRoute
+  AppSchedulerRoute: typeof AppSchedulerRoute
   AppUsersRoute: typeof AppUsersRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppProfileRoute: AppProfileRoute,
+  AppSchedulerRoute: AppSchedulerRoute,
   AppUsersRoute: AppUsersRoute,
   AppIndexRoute: AppIndexRoute,
 }
