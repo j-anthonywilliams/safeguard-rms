@@ -118,6 +118,16 @@ function UserManagementPage() {
 
   const [busy, setBusy] = useState(false)
 
+  const [busy, setBusy] = useState(false)
+
+  // ADD THESE HERE
+  const [editingUser, setEditingUser] =
+    useState<DirectoryUser | null>(null)
+
+  const [editName, setEditName] = useState('')
+  const [editPhone, setEditPhone] = useState('')
+  const [savingProfile, setSavingProfile] = useState(false)
+
   const usersTable = useMemo(
     () => blink.db.table<DirectoryUser>('users'),
     []
@@ -348,6 +358,47 @@ function UserManagementPage() {
               : JSON.stringify(error),
         })
       }
+  }
+
+  const openEditProfile = (user: DirectoryUser) => {
+    setEditingUser(user)
+    setEditName(user.displayName || '')
+    setEditPhone(user.phone || '')
+  }
+
+  const saveProfile = async () => {
+    if (!editingUser || savingProfile) {
+      return
+    }
+
+    try {
+      setSavingProfile(true)
+
+      await usersTable.update(editingUser.id, {
+        displayName: editName.trim(),
+        phone: editPhone.trim(),
+      })
+
+      await loadDirectory()
+
+      toast.success('Profile updated', {
+        description:
+          `${editName.trim() || editingUser.email} was updated.`,
+      })
+
+      setEditingUser(null)
+    } catch (error) {
+      console.error('UPDATE PROFILE ERROR:', error)
+
+      toast.error('Could not update profile', {
+        description:
+          error instanceof Error
+            ? error.message
+            : JSON.stringify(error),
+      })
+    } finally {
+      setSavingProfile(false)
+    }
   }
 
   const createInvitation = async () => {
@@ -731,6 +782,15 @@ function UserManagementPage() {
                         <Button
                           size="sm"
                           variant="outline"
+                          onClick={() => openEditProfile(item)}
+                          disabled={busy || savingProfile}
+                        >
+                          Edit profile
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
                           onClick={() =>
                             sendLoginLink(
                               item.email
@@ -753,6 +813,101 @@ function UserManagementPage() {
             </div>
           </CardContent>
         </Card>
+
+        {editingUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
+            <Card className="w-full max-w-lg shadow-xl">
+              <CardHeader>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <CardTitle>Edit user profile</CardTitle>
+                    <CardDescription>
+                      Update profile information for {editingUser.email}.
+                    </CardDescription>
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setEditingUser(null)}
+                    disabled={savingProfile}
+                    aria-label="Close edit profile"
+                  >
+                    <X className="size-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+
+              <CardContent className="space-y-4">
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-medium">
+                    Display name
+                  </span>
+
+                  <Input
+                    value={editName}
+                    onChange={event =>
+                      setEditName(event.target.value)
+                    }
+                    placeholder="Jane Smith"
+                  />
+                </label>
+
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-medium">
+                    Phone
+                  </span>
+
+                  <Input
+                    type="tel"
+                    value={editPhone}
+                    onChange={event =>
+                      setEditPhone(event.target.value)
+                    }
+                    placeholder="(402) 555-1234"
+                  />
+                </label>
+
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-medium">
+                    Email
+                  </span>
+
+                  <Input
+                    value={editingUser.email}
+                    disabled
+                  />
+
+                  <p className="text-[11px] text-muted-foreground">
+                    Authentication email cannot be changed from this screen.
+                  </p>
+                </label>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    variant="ghost"
+                    onClick={() => setEditingUser(null)}
+                    disabled={savingProfile}
+                  >
+                    Cancel
+                  </Button>
+
+                  <Button
+                    onClick={saveProfile}
+                    disabled={
+                      savingProfile ||
+                      !editName.trim()
+                    }
+                  >
+                    {savingProfile
+                      ? 'Saving…'
+                      : 'Save changes'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {pendingInvitations.length > 0 && (
           <Card>
