@@ -118,8 +118,6 @@ function UserManagementPage() {
 
   const [busy, setBusy] = useState(false)
 
-  const [busy, setBusy] = useState(false)
-
   // ADD THESE HERE
   const [editingUser, setEditingUser] =
     useState<DirectoryUser | null>(null)
