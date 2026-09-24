@@ -811,7 +811,7 @@ function UserManagementPage() {
                 </Button>
               </div>
             </div>
-
+          </CardHeader>
           <CardContent className="p-0">
             <div className="divide-y divide-border">
               {filteredUsers.length ? (
