@@ -10,7 +10,12 @@
  * full layout control — every line is yours to edit.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+} from 'react'
 import type { ReactNode } from 'react'
 import { blink } from '@/blink/client'
 import { Button } from '@/components/ui/button'
@@ -243,11 +248,12 @@ export function AppSidebarShell() {
                 canManageUsers(accessLevel)
             )
             .map(item => (
-              <NavItem
-                key={`${item.href}-${item.label}`}
-                item={item}
-                collapsed={collapsed}
-              />
+              <React.Fragment key={`${item.href}-${item.label}`}>
+                <NavItem
+                  item={item}
+                  collapsed={collapsed}
+                />
+              </React.Fragment>
             ))}
         </div>
       </div>
