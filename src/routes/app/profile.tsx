@@ -1,4 +1,8 @@
-import { useEffect, useState } from 'react'
+import {
+  useEffect,
+  useState,
+  type FormEvent,
+} from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { blink } from '@/blink/client'
 import { BlinkClientBoundary } from '@/components/BlinkClientBoundary'
@@ -40,7 +44,7 @@ function ProfilePage() {
     return () => window.clearTimeout(timer)
   }, [user])
 
-  const saveProfile = async (event: React.FormEvent) => {
+  const saveProfile = async (event: FormEvent) => {
     event.preventDefault()
     setSaving(true)
     try {
