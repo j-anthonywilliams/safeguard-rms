@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build && node scripts/finalize-static-build.mjs",
+    "start": "serve --single --listen tcp://0.0.0.0:$PORT dist",
     "preview": "vite preview",
     "lint:css": "stylelint \"src/**/*.css\" --fix --quiet",
     "lint:js": "eslint . --ext ts,tsx --report-unused-disable-directives",
@@ -49,6 +50,7 @@
     "react-hot-toast": "^2.6.0",
     "react-responsive": "^10.0.1",
     "recharts": "^3.10.1",
+    "serve": "^14.2.6",
     "sonner": "^2.0.8",
     "stylelint": "^17.14.1",
     "stylelint-config-standard": "^40.0.0",
