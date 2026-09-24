@@ -811,7 +811,7 @@ function Panel({ type, userId, accessLevel, directoryUsers, initialIncident, onC
   const updatePair = (index: number, key: keyof CodeDisposition, value: string) => setCodeDispositions(current => current.map((pair, pairIndex) => pairIndex === index ? { ...pair, [key]: value } : pair))
   const addPair = () => setCodeDispositions(current => [...current, { code: '', disposition: '' }])
   const removePair = (index: number) => setCodeDispositions(current => current.length === 1 ? current : current.filter((_, pairIndex) => pairIndex !== index))
-  const update = (key: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm(prev => ({ ...prev, [key]: e.target.value }))
+  const update = (key: string) => (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm(prev => ({ ...prev, [key]: e.target.value }))
   const field = (label: string, key: string, placeholder = '', type = 'text') => <label className="space-y-1.5"><span className="text-xs font-medium">{label}</span><Input type={type} placeholder={placeholder} value={form[key] || ''} onChange={update(key)} /></label>
   const equipmentAssignment = type === 'equipment' ? <label className="space-y-1.5 sm:col-span-2"><span className="text-xs font-medium">Assign to user</span><select className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring" value={form.assignedTo || userId} onChange={update('assignedTo')}><option value={userId}>Myself</option>{directoryUsers.filter(item => item.id !== userId).map(item => <option key={item.id} value={item.id}>{item.displayName || item.email}</option>)}</select></label> : null
   const save = async () => {
