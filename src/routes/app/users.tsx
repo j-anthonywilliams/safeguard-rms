@@ -764,49 +764,53 @@ function UserManagementPage() {
               </CardDescription>
             </div>
 
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={refreshDirectory}
-              >
-                <RefreshCw className="size-3.5" />
-                Refresh
-              </Button>
+            <div className="flex flex-col gap-4 lg:items-end">
+              {/* Active / Archived selector */}
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  size="sm"
+                  variant={!showArchived ? 'default' : 'outline'}
+                  onClick={() => setShowArchived(false)}
+                >
+                  Active users
+                </Button>
 
-              <div className="relative w-full md:w-72">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Button
+                  size="sm"
+                  variant={showArchived ? 'default' : 'outline'}
+                  onClick={() => setShowArchived(true)}
+                >
+                  Archived users
+                </Button>
+              </div>
 
-                <Input
-                  className="pl-9"
-                  value={search}
-                  onChange={event =>
-                    setSearch(event.target.value)
-                  }
-                  placeholder="Search name or email"
-                  aria-label="Search users"
-                />
+              {/* Search / Refresh row */}
+              <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center lg:w-auto">
+                <div className="relative w-full sm:w-72">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant={!showArchived ? 'default' : 'outline'}
-                    onClick={() => setShowArchived(false)}
-                  >
-                    Active users
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    variant={showArchived ? 'default' : 'outline'}
-                    onClick={() => setShowArchived(true)}
-                  >
-                    Archived users
-                  </Button>
+                  <Input
+                    className="pl-9"
+                    value={search}
+                    onChange={event =>
+                      setSearch(event.target.value)
+                    }
+                    placeholder="Search name or email"
+                    aria-label="Search users"
+                  />
                 </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={refreshDirectory}
+                  className="shrink-0"
+                >
+                  <RefreshCw className="size-3.5" />
+                  Refresh
+                </Button>
               </div>
             </div>
-          </CardHeader>
 
           <CardContent className="p-0">
             <div className="divide-y divide-border">
