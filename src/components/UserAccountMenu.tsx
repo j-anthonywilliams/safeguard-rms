@@ -45,6 +45,10 @@ export function UserAccountMenu() {
       }
 
       const initializeUser = async () => {
+        if (!state.user) {
+          setAccessLevel('user')
+          return
+        }
         try {
           const reconciledRole = await reconcileCurrentUser()
 
