@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type ReactNode,
+} from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { blink } from '@/blink/client'
 import { BlinkClientBoundary } from '@/components/BlinkClientBoundary'
@@ -705,9 +711,9 @@ return (
 )
 }
 
-function Metric({ icon, label, value, detail, accent }: { icon: React.ReactNode; label: string; value: string; detail: string; accent: string }) { return <Card className="relative overflow-hidden transition-transform duration-200 hover:-translate-y-0.5"><div className={`absolute inset-y-0 left-0 w-1 ${accent}`} /><CardContent className="p-5"><div className="mb-4 flex items-center justify-between"><span className="text-muted-foreground">{icon}</span><span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Live</span></div><p className="text-3xl font-semibold tracking-tight">{value}</p><p className="mt-1 text-sm font-medium">{label}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></CardContent></Card> }
-function Empty({ icon, text, action }: { icon: React.ReactNode; text: string; action: () => void }) { return <div className="flex flex-col items-center gap-3 px-5 py-12 text-center"><div className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">{icon}</div><p className="text-sm text-muted-foreground">{text}</p><Button variant="outline" size="sm" onClick={action}>Get started</Button></div> }
-function ActionCard({ icon, title, description, action, onClick, children }: { icon: React.ReactNode; title: string; description: string; action: string; onClick: () => void; children: React.ReactNode }) { return <Card className="flex items-center justify-between gap-4 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"><div className="flex min-w-0 items-center gap-4"><div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">{icon}</div><div className="min-w-0"><h2 className="text-sm font-semibold">{title}</h2><p className="mt-1 truncate text-xs text-muted-foreground">{description}</p></div></div><div className="hidden items-center gap-3 sm:flex">{children}<Button variant="outline" size="sm" onClick={onClick} disabled={action === 'Read only'}>{action}</Button></div><Button variant="outline" size="icon" className="sm:hidden" onClick={onClick} disabled={action === 'Read only'} aria-label={action}><ArrowUpRight className="size-4" /></Button></Card> }
+function Metric({ icon, label, value, detail, accent }: { icon: ReactNode; label: string; value: string; detail: string; accent: string }) { return <Card className="relative overflow-hidden transition-transform duration-200 hover:-translate-y-0.5"><div className={`absolute inset-y-0 left-0 w-1 ${accent}`} /><CardContent className="p-5"><div className="mb-4 flex items-center justify-between"><span className="text-muted-foreground">{icon}</span><span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Live</span></div><p className="text-3xl font-semibold tracking-tight">{value}</p><p className="mt-1 text-sm font-medium">{label}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></CardContent></Card> }
+function Empty({ icon, text, action }: { icon: ReactNode; text: string; action: () => void }) { return <div className="flex flex-col items-center gap-3 px-5 py-12 text-center"><div className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">{icon}</div><p className="text-sm text-muted-foreground">{text}</p><Button variant="outline" size="sm" onClick={action}>Get started</Button></div> }
+function ActionCard({ icon, title, description, action, onClick, children }: { icon: ReactNode; title: string; description: string; action: string; onClick: () => void; children: ReactNode }) { return <Card className="flex items-center justify-between gap-4 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"><div className="flex min-w-0 items-center gap-4"><div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">{icon}</div><div className="min-w-0"><h2 className="text-sm font-semibold">{title}</h2><p className="mt-1 truncate text-xs text-muted-foreground">{description}</p></div></div><div className="hidden items-center gap-3 sm:flex">{children}<Button variant="outline" size="sm" onClick={onClick} disabled={action === 'Read only'}>{action}</Button></div><Button variant="outline" size="icon" className="sm:hidden" onClick={onClick} disabled={action === 'Read only'} aria-label={action}><ArrowUpRight className="size-4" /></Button></Card> }
 
 function LoginGate() {
   const [busy, setBusy] = useState(false)
