@@ -42,6 +42,7 @@ interface DirectoryUser {
   emailVerified?: string | number
   lastSignIn?: string | null
   createdAt: string
+  updatedAt: string
   isArchived?: number
   archivedAt?: string | null
   archivedBy?: string | null
