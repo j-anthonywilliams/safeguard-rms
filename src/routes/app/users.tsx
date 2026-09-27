@@ -33,6 +33,7 @@ import {
 } from '@/lib/access-control'
 import type { AccessLevel } from '@/lib/access-control'
 import { getDevRole } from '@/lib/dev-accounts'
+import { getUserDirectory } from '@/lib/users.functions'
 
 interface DirectoryUser {
   id: string
@@ -161,25 +162,34 @@ function UserManagementPage() {
   const loadDirectory = async () => {
     if (!currentUser) return
 
-    const [userRows, roleRows, invitationRows] =
-      await Promise.all([
-        usersTable.list({
-          orderBy: {
-            createdAt: 'desc',
-          },
-          limit: 500,
-        }),
-        rolesTable.list({
-          limit: 500,
-        }),
-        invitationsTable.list({
-          limit: 500,
-        }),
-      ])
+    const data = await getUserDirectory()
 
-    setUsers(userRows)
-    setRoles(roleRows)
-    setPendingInvitations(invitationRows)
+    setUsers(
+      data.users.map(user => ({
+        id: user.id,
+        email: user.email,
+        displayName: user.displayName ?? undefined,
+        phone: user.phone ?? undefined,
+        emailVerified: user.emailVerified,
+        lastSignIn: user.lastSignIn ?? undefined,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      }))
+    )
+
+    setRoles(data.roles)
+
+    setPendingInvitations(
+      data.pendingInvitations.map(invitation => ({
+        id: invitation.id,
+        email: invitation.email,
+        displayName: invitation.displayName,
+        requestedRole: invitation.requestedRole,
+        invitedBy: invitation.invitedBy,
+        createdAt: invitation.createdAt,
+        updatedAt: invitation.updatedAt,
+      }))
+    )
   }
 
   useEffect(() => {
@@ -195,13 +205,7 @@ function UserManagementPage() {
         description: error.message,
       })
     })
-  }, [
-    accessLevel,
-    currentUser,
-    rolesTable,
-    usersTable,
-    invitationsTable,
-  ])
+  }, [accessLevel, currentUser, rolesTable,])
 
   const roleByUser = useMemo(
     () =>
