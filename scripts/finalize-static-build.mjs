@@ -1,21 +1,20 @@
 /**
- * Flatten the TanStack Start build into a static `dist/` that Blink hosting serves.
+ * Flatten the TanStack Start client build into `dist/` while preserving
+ * the server build under `.vite-out/server/` for Railway deployment.
  *
  * TanStack Start's `vite build` (configured with `build.outDir: '.vite-out'`)
  * emits:
- *   .vite-out/client/   ← prerendered HTML + assets (what we want, STATIC)
- *   .vite-out/server/   ← SSR Nitro server (NOT used by Blink's static S3 hosting)
+ *   .vite-out/client/   <- prerendered HTML + client assets
+ *   .vite-out/server/   <- TanStack Start server entry
  *
- * Blink uploads `dist/` and serves `dist/index.html` (see src/constants/publish.ts
- * BUILD_PATHS['vite-react'] = 'dist'). So we copy `.vite-out/client/*` up into a
- * flat `dist/` and drop the server.
+ * The client output is copied into `dist/` for static assets and prerendered
+ * HTML. The server output remains in `.vite-out/server/` so Railway can run
+ * the application server and provide server-side access to PostgreSQL.
  *
- * Why build into `.vite-out` instead of `dist/` directly: sandboxes created before the
- * platform stopped injecting `_redirects` still carry a read-only copy owned by another
- * user, and Start's client build tries to EMPTY its out dir first → `EACCES: unlink
- * _redirects`. Building into a clean temp dir avoids that entirely; here we only COPY
- * into `dist/` (never delete), so a legacy read-only `_redirects` is tolerated. Nothing
- * injects that file any more and nothing executes it — see skills/blink-hosting.
+ * Why build into `.vite-out` instead of `dist/` directly: older sandboxes may
+ * contain a read-only `_redirects` file. Start's client build tries to empty
+ * its output directory first, which can cause EACCES errors. Building into a
+ * clean temporary directory avoids that problem.
  */
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
@@ -48,8 +47,6 @@ for (const entry of readdirSync(SRC)) {
     }
   }
 }
-
-rmSync('.vite-out', { recursive: true, force: true })
 
 if (!existsSync(join(DEST, 'index.html'))) {
   console.error('[finalize] dist/index.html missing after flatten — build is not publishable')
