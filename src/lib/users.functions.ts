@@ -85,9 +85,13 @@ export const getUserDirectory = createServerFn({ method: 'GET' }).handler(
       ])
 
     return {
-      users: usersResult.rows,
-      roles: rolesResult.rows,
-      pendingInvitations: invitationsResult.rows,
-    }
+        users: usersResult.rows,
+        roles: rolesResult.rows,
+        pendingInvitations: invitationsResult.rows,
+        userCount: usersResult.rowCount ?? usersResult.rows.length,
+        roleCount: rolesResult.rowCount ?? rolesResult.rows.length,
+        invitationCount:
+            invitationsResult.rowCount ?? invitationsResult.rows.length,
+        }
   },
 )

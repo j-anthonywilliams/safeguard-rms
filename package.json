@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build && node scripts/finalize-static-build.mjs",
-    "start": "node .vite-out/server/server.js",
+    "start": "srvx --prod -s ../../dist .vite-out/server/server.js",
     "preview": "vite preview",
     "lint:css": "stylelint \"src/**/*.css\" --fix --quiet",
     "lint:js": "eslint . --ext ts,tsx --report-unused-disable-directives",
@@ -54,6 +54,7 @@
     "recharts": "^3.10.1",
     "serve": "^14.2.6",
     "sonner": "^2.0.8",
+    "srvx": "^1.0.5",
     "stylelint": "^17.14.1",
     "stylelint-config-standard": "^40.0.0",
     "tailwind-merge": "^3.6.0",
