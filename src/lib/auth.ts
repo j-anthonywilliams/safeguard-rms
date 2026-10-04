@@ -13,3 +13,5 @@ export const auth = betterAuth({
 
   plugins: [tanstackStartCookies()],
 })
+
+export default auth
