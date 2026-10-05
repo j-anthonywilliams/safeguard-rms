@@ -2,16 +2,37 @@ import { betterAuth } from 'better-auth'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { Pool } from 'pg'
 
-export const auth = betterAuth({
-  database: new Pool({
-    connectionString: process.env.DATABASE_URL,
-  }),
+let pool: Pool | undefined
+let authInstance: ReturnType<typeof createAuth> | undefined
 
-  emailAndPassword: {
-    enabled: true,
-  },
+function getPool() {
+  if (!pool) {
+    const databaseUrl = process.env.DATABASE_URL
 
-  plugins: [tanstackStartCookies()],
-})
+    if (!databaseUrl) {
+      throw new Error('DATABASE_URL is not configured')
+    }
 
-export default auth
+    pool = new Pool({
+      connectionString: databaseUrl,
+    })
+  }
+
+  return pool
+}
+
+function createAuth() {
+  return betterAuth({
+    database: getPool(),
+
+    emailAndPassword: {
+      enabled: true,
+    },
+
+    plugins: [tanstackStartCookies()],
+  })
+}
+
+export function getAuth() {
+  return (authInstance ??= createAuth())
+}
