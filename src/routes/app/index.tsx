@@ -8,10 +8,10 @@ import {
 import { createFileRoute } from '@tanstack/react-router'
 import { authClient } from '@/lib/auth-client'
 import {
-  approveIncident,
+  approveIncident as approveIncidentServer,
   createAttendanceLog,
   getDashboardData,
-  reviewIncident,
+  reviewIncident as reviewIncidentServer,
 } from '@/lib/dashboard.functions'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -149,24 +149,57 @@ function DashboardHome() {
   }
   const lastAttendance = attendanceLogs[0]
   const isClockedIn = lastAttendance?.eventType === 'clock_in'
-  const approveIncident = async (incident: Incident) => {
-    if (!canApproveIncidents(accessLevel)) return
-    try {
-      const approvedAt = new Date().toISOString()
-      await incidentTable.update(incident.id, { approvalStatus: 'Approved', approvedBy: user?.displayName || user?.email || 'Supervisor', approvedAt })
-      setIncidents(current => current.map(item => item.id === incident.id ? { ...item, approvalStatus: 'Approved', approvedBy: user?.displayName || user?.email || 'Supervisor', approvedAt } : item))
-      toast.success('Incident approved', { description: `${incident.reportNumber} is now approved.` })
-    } catch (error) { toast.error('Could not approve incident', { description: error instanceof Error ? error.message : 'Please try again.' }) }
+    const approveIncident = async (incident: Incident) => {
+      if (!canApproveIncidents(accessLevel)) return
+
+      try {
+        const updatedIncident = await approveIncidentServer({
+          data: {
+            incidentId: incident.id,
+          },
+        })
+
+        setIncidents(current =>
+          current.map(item =>
+            item.id === incident.id
+              ? updatedIncident
+              : item,
+          ),
+        )
+
+        toast.success('Incident approved', {
+          description: `${incident.reportNumber} is now approved.`,
+        })
+      } catch (error) {
+        toast.error('Could not approve incident', {
+          description:
+            error instanceof Error
+              ? error.message
+              : 'Please try again.',
+        })
+      }
+    }
   }
   const reviewIncident = (incident: Incident) => { setReviewingIncident(incident); setActivePanel('review') }
   const decideIncident = async (decision: 'Approved' | 'Rejected', feedback: string) => {
     if (!reviewingIncident || !canApproveIncidents(accessLevel)) return
     if (decision === 'Rejected' && !feedback.trim()) { toast.error('Feedback is required', { description: 'Tell the originating officer what needs to change.' }); return }
     try {
-      const reviewedAt = new Date().toISOString()
-      const reviewer = user?.displayName || user?.email || 'Supervisor'
-      await incidentTable.update(reviewingIncident.id, { approvalStatus: decision, reviewFeedback: feedback.trim() || null, reviewedBy: reviewer, reviewedAt, approvedBy: decision === 'Approved' ? reviewer : null, approvedAt: decision === 'Approved' ? reviewedAt : null })
-      setIncidents(current => current.map(item => item.id === reviewingIncident.id ? { ...item, approvalStatus: decision, reviewFeedback: feedback.trim() || null, reviewedBy: reviewer, reviewedAt, approvedBy: decision === 'Approved' ? reviewer : null, approvedAt: decision === 'Approved' ? reviewedAt : null } : item))
+            const updatedIncident = await reviewIncidentServer({
+        data: {
+          incidentId: reviewingIncident.id,
+          decision,
+          feedback,
+        },
+      })
+
+      setIncidents(current =>
+        current.map(item =>
+          item.id === reviewingIncident.id
+            ? updatedIncident
+            : item,
+        ),
+      )
       setActivePanel(null); setReviewingIncident(null)
       toast.success(decision === 'Approved' ? 'Report approved' : 'Report returned to officer', { description: decision === 'Approved' ? `${reviewingIncident.reportNumber} is approved.` : 'The officer can update the report and resubmit it.' })
     } catch (error) { toast.error('Could not update review', { description: error instanceof Error ? error.message : 'Please try again.' }) }
