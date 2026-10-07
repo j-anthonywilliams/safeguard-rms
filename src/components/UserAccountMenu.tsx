@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { blink } from '@/blink/client'
+import { useEffect, useRef, useState } from 'react'
+import { authClient } from '@/lib/auth-client'
+import { getCurrentUserRole } from '@/lib/users.functions'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { ACCESS_LABELS } from '@/lib/access-control'
@@ -7,14 +8,6 @@ import type { AccessLevel } from '@/lib/access-control'
 import { getDevRole } from '@/lib/dev-accounts'
 import { LogOut, Settings, UserRound } from 'lucide-react'
 import { reconcileCurrentUser } from '@/lib/user-provisioning'
-
-interface AppRole {
-  id: string
-  userId: string
-  role: AccessLevel
-  createdAt: string
-  updatedAt: string
-}
 
 export function UserAccountMenu() {
   const [user, setUser] = useState<{
@@ -30,54 +23,49 @@ export function UserAccountMenu() {
 
   const menuRef = useRef<HTMLDivElement>(null)
 
-  const rolesTable = useMemo(
-    () => blink.db.table<AppRole>('app_roles'),
-    []
-  )
+  const { data: session } = authClient.useSession()
 
   useEffect(() => {
-    return blink.auth.onAuthStateChanged((state) => {
-      setUser(state.user)
+    setUser(
+      session?.user
+        ? {
+            id: session.user.id,
+            email: session.user.email,
+            displayName: session.user.name,
+          }
+        : null
+    )
 
-      if (!state.user) {
-        setAccessLevel('user')
-        return
-      }
+    if (!session?.user) {
+      setAccessLevel('user')
+      return
+    }
 
-      const initializeUser = async () => {
-        if (!state.user) {
-          setAccessLevel('user')
+    const initializeUser = async () => {
+      try {
+        const reconciledRole = await reconcileCurrentUser()
+
+        const devRole = getDevRole()
+
+        if (devRole) {
+          setAccessLevel(devRole)
           return
         }
-        try {
-          const reconciledRole = await reconcileCurrentUser()
 
-          const devRole = getDevRole()
-
-          if (devRole) {
-            setAccessLevel(devRole)
-            return
-          }
-
-          if (reconciledRole) {
-            setAccessLevel(reconciledRole)
-            return
-          }
-
-          const rows = await rolesTable.list({
-            where: { userId: state.user.id },
-            limit: 1,
-          })
-
-          setAccessLevel(rows[0]?.role || 'user')
-        } catch {
-          setAccessLevel('user')
+        if (reconciledRole) {
+          setAccessLevel(reconciledRole)
+          return
         }
-      }
 
-      initializeUser()
-    })
-  }, [rolesTable])
+        const { role } = await getCurrentUserRole()
+        setAccessLevel(role)
+      } catch {
+        setAccessLevel('user')
+      }
+    }
+
+    initializeUser()
+  }, [session])
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -108,7 +96,7 @@ export function UserAccountMenu() {
 
   const signOut = async () => {
     setOpen(false)
-    await blink.auth.logout()
+    await authClient.signOut()
   }
 
   return (
