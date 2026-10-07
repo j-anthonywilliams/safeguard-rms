@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getDb } from './db.server'
+import { getSession } from './auth'
 
 export interface UserDirectoryRecord {
   id: string
@@ -93,5 +94,31 @@ export const getUserDirectory = createServerFn({ method: 'GET' }).handler(
         invitationCount:
             invitationsResult.rowCount ?? invitationsResult.rows.length,
         }
+  },
+)
+
+export const getCurrentUserRole = createServerFn({ method: 'GET' }).handler(
+  async () => {
+    const session = await getSession()
+
+    if (!session?.user) {
+      return { role: 'user' as const }
+    }
+
+    const db = getDb()
+
+    const result = await db.query<{ role: UserRoleRecord['role'] }>(
+      `
+        SELECT role
+        FROM app_roles
+        WHERE user_id = $1
+        LIMIT 1
+      `,
+      [session.user.id],
+    )
+
+    return {
+      role: result.rows[0]?.role ?? 'user',
+    }
   },
 )

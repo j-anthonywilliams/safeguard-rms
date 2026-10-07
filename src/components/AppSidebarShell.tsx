@@ -14,10 +14,10 @@ import React, {
   useState,
   useEffect,
   useCallback,
-  useMemo,
 } from 'react'
 import type { ReactNode } from 'react'
-import { blink } from '@/blink/client'
+import { authClient } from '@/lib/auth-client'
+import { getCurrentUserRole } from '@/lib/users.functions'
 import { Button } from '@/components/ui/button'
 import {
   Tooltip,
@@ -40,14 +40,6 @@ import { canManageUsers } from '@/lib/access-control'
 import { getDevRole } from '@/lib/dev-accounts'
 
 const SIDEBAR_KEY = 'sidebar_collapsed'
-
-interface AppRole {
-  id: string
-  userId: string
-  role: AccessLevel
-  createdAt: string
-  updatedAt: string
-}
 
 interface NavItemDef {
   href: string
@@ -133,36 +125,25 @@ export function AppSidebarShell() {
   const [accessLevel, setAccessLevel] =
     useState<AccessLevel>('user')
 
-  const rolesTable = useMemo(
-    () => blink.db.table<AppRole>('app_roles'),
-    []
-  )
+    const { data: session } = authClient.useSession()
 
   useEffect(() => {
-    return blink.auth.onAuthStateChanged((state) => {
-      if (!state.user) {
-        setAccessLevel('user')
-        return
-      }
+    const devRole = getDevRole()
 
-      const devRole = getDevRole()
+    if (devRole) {
+      setAccessLevel(devRole)
+      return
+    }
 
-      if (devRole) {
-        setAccessLevel(devRole)
-        return
-      }
+    if (!session?.user) {
+      setAccessLevel('user')
+      return
+    }
 
-      rolesTable
-        .list({
-          where: { userId: state.user.id },
-          limit: 1,
-        })
-        .then(rows =>
-          setAccessLevel(rows[0]?.role || 'user')
-        )
-        .catch(() => setAccessLevel('user'))
-    })
-  }, [rolesTable])
+    getCurrentUserRole()
+      .then(({ role }) => setAccessLevel(role))
+      .catch(() => setAccessLevel('user'))
+  }, [session])
 
   const [collapsed, setCollapsed] = useState(false)
 
