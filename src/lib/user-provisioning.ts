@@ -1,20 +1,12 @@
-import { blink } from '@/blink/client'
+import { createServerFn } from '@tanstack/react-start'
+import { getSession } from '@/lib/auth'
+import { getDb } from '@/lib/db.server'
 import type { AccessLevel } from '@/lib/access-control'
-
-interface PendingInvitation {
-  id: string
-  email: string
-  displayName: string
-  requestedRole: AccessLevel
-  invitedBy: string
-  createdAt: string
-  updatedAt: string
-}
 
 interface DirectoryUser {
   id: string
   email: string
-  displayName?: string | null
+  displayName: string | null
   createdAt: string
 }
 
@@ -26,116 +18,157 @@ interface AppRole {
   updatedAt: string
 }
 
-export async function reconcileCurrentUser() {
-  const state = await new Promise<{
-    user: {
-      id: string
-      email?: string
-      displayName?: string
-    } | null
-  }>((resolve) => {
-    let settled = false
+interface PendingInvitation {
+  id: string
+  email: string
+  displayName: string
+  requestedRole: AccessLevel
+  invitedBy: string
+  createdAt: string
+  updatedAt: string
+}
 
-    const unsubscribe = blink.auth.onAuthStateChanged((nextState) => {
-      if (settled || nextState.isLoading) {
-        return
-      }
-
-      settled = true
-      unsubscribe()
-
-      resolve({
-        user: nextState.user,
-      })
-    })
-  })
-
-  const authUser = state.user
+export const reconcileCurrentUser = createServerFn({
+  method: 'POST',
+}).handler(async () => {
+  const session = await getSession()
+  const authUser = session?.user
 
   if (!authUser?.id || !authUser.email) {
     return null
   }
 
-  const usersTable =
-    blink.db.table<DirectoryUser>('users')
-
-  const rolesTable =
-    blink.db.table<AppRole>('app_roles')
-
-  const invitationsTable =
-    blink.db.table<PendingInvitation>(
-      'pending_user_invitations'
-    )
+  const db = getDb()
 
   const email = authUser.email.toLowerCase()
   const now = new Date().toISOString()
 
   const [existingUsers, invitations, existingRoles] =
     await Promise.all([
-      usersTable.list({
-        where: { id: authUser.id },
-        limit: 1,
-      }),
+      db.query<DirectoryUser>(
+        `
+          SELECT
+            id,
+            email,
+            display_name AS "displayName",
+            created_at AS "createdAt"
+          FROM users
+          WHERE id = $1
+          LIMIT 1
+        `,
+        [authUser.id],
+      ),
 
-      invitationsTable.list({
-        where: { email },
-        limit: 1,
-      }),
+      db.query<PendingInvitation>(
+        `
+          SELECT
+            id,
+            email,
+            display_name AS "displayName",
+            requested_role AS "requestedRole",
+            invited_by AS "invitedBy",
+            created_at AS "createdAt",
+            updated_at AS "updatedAt"
+          FROM pending_user_invitations
+          WHERE LOWER(email) = $1
+          ORDER BY created_at ASC
+          LIMIT 1
+        `,
+        [email],
+      ),
 
-      rolesTable.list({
-        where: { userId: authUser.id },
-        limit: 1,
-      }),
+      db.query<AppRole>(
+        `
+          SELECT
+            id,
+            user_id AS "userId",
+            role,
+            created_at AS "createdAt",
+            updated_at AS "updatedAt"
+          FROM app_roles
+          WHERE user_id = $1
+          LIMIT 1
+        `,
+        [authUser.id],
+      ),
     ])
 
-  const existingUser = existingUsers[0]
-  const invitation = invitations[0]
-  const existingRole = existingRoles[0]
+  const existingUser = existingUsers.rows[0]
+  const invitation = invitations.rows[0]
+  const existingRole = existingRoles.rows[0]
 
-  // Make sure the real Blink account exists in the SafeGuard directory.
   if (!existingUser) {
-    await usersTable.create({
-      id: authUser.id,
-      email: authUser.email,
-      displayName:
+    await db.query(
+      `
+        INSERT INTO users (
+          id,
+          email,
+          display_name,
+          created_at,
+          updated_at,
+          last_sign_in,
+          is_archived
+        )
+        VALUES ($1, $2, $3, $4, $4, $4, 0)
+      `,
+      [
+        authUser.id,
+        authUser.email,
         invitation?.displayName ||
-        authUser.displayName ||
-        authUser.email.split('@')[0],
-      createdAt: now,
-    })
+          authUser.name ||
+          authUser.email.split('@')[0],
+        now,
+      ],
+    )
   }
 
-  /*
-   * Initial provisioning:
-   *
-   * The invitation's requested role is authoritative the first
-   * time this account is provisioned.
-   *
-   * If Blink/SafeGuard already created a default "user" role,
-   * replace that initial role with the invited role.
-   */
   if (invitation) {
     if (existingRole) {
       if (existingRole.role !== invitation.requestedRole) {
-        await rolesTable.update(existingRole.id, {
-          role: invitation.requestedRole,
-          updatedAt: now,
-        })
+        await db.query(
+          `
+            UPDATE app_roles
+            SET role = $1, updated_at = $2
+            WHERE id = $3
+          `,
+          [
+            invitation.requestedRole,
+            now,
+            existingRole.id,
+          ],
+        )
       }
     } else {
-      await rolesTable.create({
-        id: crypto.randomUUID(),
-        userId: authUser.id,
-        role: invitation.requestedRole,
-        createdAt: now,
-        updatedAt: now,
-      })
+      await db.query(
+        `
+          INSERT INTO app_roles (
+            id,
+            user_id,
+            role,
+            created_at,
+            updated_at
+          )
+          VALUES ($1, $2, $3, $4, $4)
+        `,
+        [
+          crypto.randomUUID(),
+          authUser.id,
+          invitation.requestedRole,
+          now,
+        ],
+      )
     }
 
-    await invitationsTable.delete(invitation.id)
+    await db.query(
+      `
+        DELETE FROM pending_user_invitations
+        WHERE id = $1
+      `,
+      [invitation.id],
+    )
 
     return invitation.requestedRole
   }
 
   return existingRole?.role || null
-}
+})
