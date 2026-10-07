@@ -113,9 +113,12 @@ export const getDashboardData = createServerFn({
   )
 
   const accessLevel = roleResult.rows[0]?.role ?? 'user'
-  const canViewAllIncidents = ['supervisor', 'admin', 'backend'].includes(
-    accessLevel,
-  )
+
+  const canViewAllIncidents = [
+    'supervisor',
+    'admin',
+    'backend',
+  ].includes(accessLevel)
 
   const incidentQuery = canViewAllIncidents
     ? db.query<DashboardIncident>(`
@@ -317,3 +320,259 @@ export const getDashboardData = createServerFn({
     directoryUsers: usersResult.rows,
   }
 })
+
+export const createAttendanceLog = createServerFn({
+  method: 'POST',
+})
+  .inputValidator(
+    (data: {
+      eventType: 'clock_in' | 'clock_out'
+      latitude: number | null
+      longitude: number | null
+      accuracy: number | null
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const session = await getSession()
+
+    if (!session?.user) {
+      throw new Error('Not authenticated')
+    }
+
+    const db = getDb()
+    const now = new Date().toISOString()
+
+    const result = await db.query<DashboardAttendanceLog>(
+      `
+        INSERT INTO attendance_logs (
+          id,
+          user_id,
+          event_type,
+          event_at,
+          latitude,
+          longitude,
+          accuracy
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING
+          id,
+          user_id AS "userId",
+          event_type AS "eventType",
+          event_at AS "eventAt",
+          latitude,
+          longitude,
+          accuracy
+      `,
+      [
+        crypto.randomUUID(),
+        session.user.id,
+        data.eventType,
+        now,
+        data.latitude,
+        data.longitude,
+        data.accuracy,
+      ],
+    )
+
+    return result.rows[0]
+  })
+
+  export const approveIncident = createServerFn({
+  method: 'POST',
+})
+  .inputValidator(
+    (data: {
+      incidentId: string
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const session = await getSession()
+
+    if (!session?.user) {
+      throw new Error('Not authenticated')
+    }
+
+    const db = getDb()
+
+    const roleResult = await db.query<{ role: AccessLevel }>(
+      `
+        SELECT role
+        FROM app_roles
+        WHERE user_id = $1
+        LIMIT 1
+      `,
+      [session.user.id],
+    )
+
+    const accessLevel = roleResult.rows[0]?.role ?? 'user'
+
+    if (!['supervisor', 'admin', 'backend'].includes(accessLevel)) {
+      throw new Error('Insufficient permissions')
+    }
+
+    const approvedAt = new Date().toISOString()
+    const approvedBy =
+      session.user.name ||
+      session.user.email ||
+      'Supervisor'
+
+    const result = await db.query<DashboardIncident>(
+      `
+        UPDATE incidents
+        SET
+          approval_status = 'Approved',
+          approved_by = $1,
+          approved_at = $2
+        WHERE id = $3
+        RETURNING
+          id,
+          user_id AS "userId",
+          report_number AS "reportNumber",
+          incident_date AS "incidentDate",
+          location,
+          city,
+          state,
+          zip_code AS "zipCode",
+          subject_name AS "subjectName",
+          subject_phone AS "subjectPhone",
+          subject_dob AS "subjectDob",
+          violent_flag AS "violentFlag",
+          ban_bar_flag AS "banBarFlag",
+          incident_codes AS "incidentCodes",
+          disposition,
+          narrative,
+          approval_status AS "approvalStatus",
+          approved_by AS "approvedBy",
+          approved_at AS "approvedAt",
+          review_feedback AS "reviewFeedback",
+          reviewed_by AS "reviewedBy",
+          reviewed_at AS "reviewedAt",
+          created_at AS "createdAt",
+          case_file_id AS "caseFileId",
+          parent_incident_id AS "parentIncidentId",
+          report_type AS "reportType"
+        `,
+      [
+        approvedBy,
+        approvedAt,
+        data.incidentId,
+      ],
+    )
+
+    if (!result.rows[0]) {
+      throw new Error('Incident not found')
+    }
+
+    return result.rows[0]
+  })
+
+export const reviewIncident = createServerFn({
+  method: 'POST',
+})
+  .inputValidator(
+    (data: {
+      incidentId: string
+      decision: 'Approved' | 'Rejected'
+      feedback: string
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const session = await getSession()
+
+    if (!session?.user) {
+      throw new Error('Not authenticated')
+    }
+
+    if (
+      data.decision === 'Rejected' &&
+      !data.feedback.trim()
+    ) {
+      throw new Error('Feedback is required')
+    }
+
+    const db = getDb()
+
+    const roleResult = await db.query<{ role: AccessLevel }>(
+      `
+        SELECT role
+        FROM app_roles
+        WHERE user_id = $1
+        LIMIT 1
+      `,
+      [session.user.id],
+    )
+
+    const accessLevel = roleResult.rows[0]?.role ?? 'user'
+
+    if (!['supervisor', 'admin', 'backend'].includes(accessLevel)) {
+      throw new Error('Insufficient permissions')
+    }
+
+    const reviewedAt = new Date().toISOString()
+    const reviewer =
+      session.user.name ||
+      session.user.email ||
+      'Supervisor'
+
+    const result = await db.query<DashboardIncident>(
+      `
+        UPDATE incidents
+        SET
+          approval_status = $1,
+          review_feedback = $2,
+          reviewed_by = $3,
+          reviewed_at = $4,
+          approved_by =
+            CASE
+              WHEN $1 = 'Approved' THEN $3
+              ELSE NULL
+            END,
+          approved_at =
+            CASE
+              WHEN $1 = 'Approved' THEN $4
+              ELSE NULL
+            END
+        WHERE id = $5
+        RETURNING
+          id,
+          user_id AS "userId",
+          report_number AS "reportNumber",
+          incident_date AS "incidentDate",
+          location,
+          city,
+          state,
+          zip_code AS "zipCode",
+          subject_name AS "subjectName",
+          subject_phone AS "subjectPhone",
+          subject_dob AS "subjectDob",
+          violent_flag AS "violentFlag",
+          ban_bar_flag AS "banBarFlag",
+          incident_codes AS "incidentCodes",
+          disposition,
+          narrative,
+          approval_status AS "approvalStatus",
+          approved_by AS "approvedBy",
+          approved_at AS "approvedAt",
+          review_feedback AS "reviewFeedback",
+          reviewed_by AS "reviewedBy",
+          reviewed_at AS "reviewedAt",
+          created_at AS "createdAt",
+          case_file_id AS "caseFileId",
+          parent_incident_id AS "parentIncidentId",
+          report_type AS "reportType"
+        `,
+      [
+        data.decision,
+        data.feedback.trim() || null,
+        reviewer,
+        reviewedAt,
+        data.incidentId,
+      ],
+    )
+
+    if (!result.rows[0]) {
+      throw new Error('Incident not found')
+    }
+
+    return result.rows[0]
+  })

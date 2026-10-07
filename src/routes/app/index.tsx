@@ -6,8 +6,13 @@ import {
   type ReactNode,
 } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { blink } from '@/blink/client'
-import { BlinkClientBoundary } from '@/components/BlinkClientBoundary'
+import { authClient } from '@/lib/auth-client'
+import {
+  approveIncident,
+  createAttendanceLog,
+  getDashboardData,
+  reviewIncident,
+} from '@/lib/dashboard.functions'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -19,6 +24,7 @@ import type { AccessLevel } from '@/lib/access-control'
 import { getDevRole } from '@/lib/dev-accounts'
 import { DevAccountSwitcher } from '@/components/DevAccountSwitcher'
 import { UserAccountMenu } from '@/components/UserAccountMenu'
+
 
 interface Incident { id: string; userId: string; reportNumber: string; incidentDate: string; location: string; city: string; state: string; zipCode: string; subjectName: string; subjectPhone?: string; subjectDob?: string; violentFlag: string | number; banBarFlag: string | number; incidentCodes: string; disposition: string; narrative: string; approvalStatus: 'Pending' | 'Approved' | 'Rejected'; approvedBy?: string | null; approvedAt?: string | null; reviewFeedback?: string | null; reviewedBy?: string | null; reviewedAt?: string | null; createdAt: string; caseFileId?: string | null; parentIncidentId?: string | null; reportType?: string }
 interface CaseFile { id: string; userId: string; caseNumber: string; title: string; status: string; leadOfficer?: string | null; createdAt: string; updatedAt: string }
@@ -43,15 +49,20 @@ const parseCodeDispositions = (incident: Pick<Incident, 'incidentCodes' | 'dispo
 
 export const Route = createFileRoute('/app/')({
   head: () => ({ meta: [{ title: 'Command Center · SafeGuard RMS' }, { name: 'description', content: 'SafeGuard RMS public safety report management command center.' }] }),
-  component: () => <BlinkClientBoundary fallback={<LoadingShell />}><DashboardHome /></BlinkClientBoundary>,
+  component: DashboardHome,
 })
 
 function LoadingShell() { return <div className="flex min-h-dvh items-center justify-center bg-background"><div className="flex items-center gap-3 text-sm text-muted-foreground"><ShieldCheck className="size-5 animate-pulse text-primary" /> Loading command center…</div></div> }
 
 function DashboardHome() {
-  const [user, setUser] = useState<{ id: string; email?: string; displayName?: string } | null>(null)
-  const [authLoading, setAuthLoading] = useState(true)
-  const [authReady, setAuthReady] = useState(true)
+  const { data: session, isPending: authLoading } = authClient.useSession()
+  const user = session?.user
+    ? {
+        id: session.user.id,
+        email: session.user.email,
+        displayName: session.user.name,
+      }
+    : null
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [caseFiles, setCaseFiles] = useState<CaseFile[]>([])
   const [equipment, setEquipment] = useState<Equipment[]>([])
@@ -65,62 +76,37 @@ function DashboardHome() {
   const [dark, setDark] = useState(false)
   const [accessLevel, setAccessLevel] = useState<AccessLevel>('user')
   const [directoryUsers, setDirectoryUsers] = useState<{ id: string; email: string; displayName?: string | null }[]>([])
-  const incidentTable = useMemo(() => blink.db.table<Incident>('incidents'), [])
-  const caseFileTable = useMemo(() => blink.db.table<CaseFile>('case_files'), [])
-  const equipmentTable = useMemo(() => blink.db.table<Equipment>('equipment'), [])
-  const evidenceTable = useMemo(() => blink.db.table<Evidence>('evidence'), [])
-  const eventTable = useMemo(() => blink.db.table<CustodyEvent>('custody_events'), [])
-  const attendanceTable = useMemo(() => blink.db.table<AttendanceLogsRow>('attendance_logs'), [])
-  const rolesTable = useMemo(() => blink.db.table<AppRole>('app_roles'), [])
-  const usersTable = useMemo(() => blink.db.table<{ id: string; email: string; displayName?: string | null }>('users'), [])
-
-  useEffect(() => {
-  return blink.auth.onAuthStateChanged((state) => {
-    setUser(state.user)
-
-    if (!state.isLoading) {
-      setAuthLoading(false)
-      setAuthReady(true)
-    }
-  })
-}, [])
-
+  
   useEffect(() => { 
   const saved = localStorage.getItem('safeguard-theme') === 'dark'; document.documentElement.classList.toggle('dark', saved); setTimeout(() => setDark(saved), 0) }, [])
-  
+
   useEffect(() => {
-  if (!user) return
+    if (!user) return
 
-  const devRole = getDevRole()
+    const loadRecords = async () => {
+      try {
+        const data = await getDashboardData()
 
-  if (devRole) {
-    setAccessLevel(devRole)
-    return
-  }
+        setAccessLevel(data.accessLevel)
+        setIncidents(data.incidents)
+        setCaseFiles(data.caseFiles)
+        setEquipment(data.equipment)
+        setEvidence(data.evidence)
+        setEvents(data.events)
+        setAttendanceLogs(data.attendanceLogs)
+        setDirectoryUsers(data.directoryUsers)
+      } catch (error) {
+        toast.error('Could not load records', {
+          description:
+            error instanceof Error
+              ? error.message
+              : 'Please try again.',
+        })
+      }
+    }
 
-  rolesTable
-    .list({
-      where: { userId: user.id },
-      limit: 1,
-    })
-    .then(rows => setAccessLevel(rows[0]?.role || 'user'))
-    .catch(() => setAccessLevel('user'))
-}, [user, rolesTable])
-
-  useEffect(() => { if (!user) return; usersTable.list({ orderBy: { createdAt: 'asc' }, limit: 100 }).then(setDirectoryUsers).catch(() => setDirectoryUsers([])) }, [user, usersTable])
-  useEffect(() => { if (!user) return; const loadRecords = async () => {
-    try {
-      const [i, cf, eq, ev, ce, attendance] = await Promise.all([
-        incidentTable.list(canApproveIncidents(accessLevel) ? { orderBy: { createdAt: 'desc' }, limit: 100 } : { where: { userId: user.id }, orderBy: { createdAt: 'desc' }, limit: 100 }),
-        caseFileTable.list({ where: { userId: user.id }, orderBy: { updatedAt: 'desc' }, limit: 100 }),
-        equipmentTable.list({ where: { userId: user.id }, orderBy: { updatedAt: 'desc' }, limit: 8 }),
-        evidenceTable.list({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, limit: 8 }),
-        eventTable.list({ where: { userId: user.id }, orderBy: { eventAt: 'desc' }, limit: 10 }),
-        attendanceTable.list({ where: { userId: user.id }, orderBy: { eventAt: 'desc' }, limit: 30 }),
-      ])
-      setIncidents(i); setCaseFiles(cf); setEquipment(eq); setEvidence(ev); setEvents(ce); setAttendanceLogs(attendance)
-    } catch (error) { toast.error('Could not load records', { description: error instanceof Error ? error.message : 'Please try again.' }) }
-  }; loadRecords() }, [user, accessLevel, incidentTable, caseFileTable, equipmentTable, evidenceTable, eventTable, attendanceTable])
+    loadRecords()
+  }, [user])
 
   const availableEquipment = useMemo(() => equipment.filter(item => item.status === 'Available').length, [equipment])
   const activeCases = useMemo(() => caseFiles.filter(file => !['closed', 'archived', 'complete'].includes(file.status.toLowerCase())), [caseFiles])
@@ -131,7 +117,32 @@ function DashboardHome() {
     setClockBusy(true)
     const saveLog = (latitude: number | null = null, longitude: number | null = null, accuracy: number | null = null) => {
       const log = { userId: user.id, eventType, eventAt: new Date().toISOString(), latitude, longitude, accuracy }
-      attendanceTable.create(log).then(saved => { setAttendanceLogs(current => [saved, ...current]); toast.success(eventType === 'clock_in' ? 'Clocked in' : 'Clocked out', { description: latitude === null ? 'Time recorded. Location was unavailable.' : 'Time and GPS location recorded.' }) }).catch((error: Error) => toast.error('Could not record attendance', { description: error.message })).finally(() => setClockBusy(false))
+            createAttendanceLog({
+        data: {
+          eventType: log.eventType,
+          latitude: log.latitude,
+          longitude: log.longitude,
+          accuracy: log.accuracy,
+        },
+      })
+        .then(saved => {
+          setAttendanceLogs(current => [saved, ...current])
+          toast.success(
+            eventType === 'clock_in' ? 'Clocked in' : 'Clocked out',
+            {
+              description:
+                latitude === null
+                  ? 'Time recorded. Location was unavailable.'
+                  : 'Time and GPS location recorded.',
+            },
+          )
+        })
+        .catch((error: Error) =>
+          toast.error('Could not record attendance', {
+            description: error.message,
+          }),
+        )
+        .finally(() => setClockBusy(false))
     }
     if (!navigator.geolocation) { saveLog(); return }
     navigator.geolocation.getCurrentPosition(position => saveLog(position.coords.latitude, position.coords.longitude, position.coords.accuracy), () => saveLog(), { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
