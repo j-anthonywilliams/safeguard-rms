@@ -14,7 +14,7 @@ import {
   ShieldCheck,
   X,
 } from 'lucide-react'
-import { blink } from '@/blink/client'
+import { authClient } from '@/lib/auth-client'
 
 export function DevAccountSwitcher() {
   if (!import.meta.env.DEV) return null
@@ -34,7 +34,7 @@ export function DevAccountSwitcher() {
 
   const signOut = async () => {
     clearDevRole()
-    await blink.auth.logout()
+    await authClient.signOut()
   }
 
   if (minimized) {
@@ -108,7 +108,7 @@ export function DevAccountSwitcher() {
         </p>
 
         <p className="mt-1 text-xs text-muted-foreground">
-          Your actual Blink account remains authenticated.
+           Your actual account remains authenticated.
         </p>
       </div>
 
