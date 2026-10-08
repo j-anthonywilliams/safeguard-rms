@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { blink } from '@/blink/client'
+import { authClient } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -16,15 +16,13 @@ import {
 } from 'lucide-react'
 import { ACCESS_LABELS, canEditSchedule } from '@/lib/access-control'
 import type { AccessLevel } from '@/lib/access-control'
+import {
+  createPtoRequest,
+  getSchedulerData,
+  reviewPtoRequest,
+  saveScheduleEntry,
+} from '@/lib/scheduler.functions'
 import { getDevRole } from '@/lib/dev-accounts'
-
-interface AppRole {
-  id: string
-  userId: string
-  role: AccessLevel
-  createdAt: string
-  updatedAt: string
-}
 
 interface UserRow {
   id: string
@@ -90,7 +88,7 @@ const endOfCalendar = (date: Date) => {
   return new Date(
     last.getFullYear(),
     last.getMonth(),
-    last.getDate() + (6 - day)
+    last.getDate() + (6 - day),
   )
 }
 
@@ -120,18 +118,29 @@ export const Route = createFileRoute('/app/scheduler')({
 })
 
 function SchedulerPage() {
-  const [user, setUser] = useState<{
-    id: string
-    email?: string
-    displayName?: string
-  } | null>(null)
+  const {
+    data: session,
+    isPending: authLoading,
+  } = authClient.useSession()
+
+  const userId = session?.user?.id
+
+  const user = session?.user
+    ? {
+        id: session.user.id,
+        email: session.user.email,
+        displayName: session.user.name,
+      }
+    : null
 
   const [accessLevel, setAccessLevel] =
     useState<AccessLevel>('user')
 
   const [users, setUsers] = useState<UserRow[]>([])
+
   const [scheduleEntries, setScheduleEntries] =
     useState<ScheduleEntry[]>([])
+
   const [ptoRequests, setPtoRequests] =
     useState<PtoRequest[]>([])
 
@@ -151,84 +160,27 @@ function SchedulerPage() {
     useState<PtoRequest | null>(null)
 
   const [loading, setLoading] = useState(true)
-  const [authLoading, setAuthLoading] = useState(true)
-
-  const rolesTable = useMemo(
-    () => blink.db.table<AppRole>('app_roles'),
-    []
-  )
-
-  const usersTable = useMemo(
-    () => blink.db.table<UserRow>('users'),
-    []
-  )
-
-  const scheduleTable = useMemo(
-    () => blink.db.table<ScheduleEntry>('schedule_entries'),
-    []
-  )
-
-  const ptoTable = useMemo(
-    () => blink.db.table<PtoRequest>('pto_requests'),
-    []
-  )
 
   useEffect(() => {
-  return blink.auth.onAuthStateChanged(state => {
-    setUser(state.user)
-
-    if (!state.isLoading) {
-      setAuthLoading(false)
-    }
-  })
-}, [])
-
-  useEffect(() => {
-    if (!user) return
-
-    const devRole = getDevRole()
-
-    if (devRole) {
-      setAccessLevel(devRole)
+    if (!userId) {
+      setLoading(false)
       return
     }
-
-    rolesTable
-      .list({
-        where: { userId: user.id },
-        limit: 1,
-      })
-      .then(rows => setAccessLevel(rows[0]?.role || 'user'))
-      .catch(() => setAccessLevel('user'))
-  }, [user, rolesTable])
-
-  useEffect(() => {
-    if (!user) return
 
     const load = async () => {
       setLoading(true)
 
       try {
-        const [usersResult, scheduleResult, ptoResult] =
-          await Promise.all([
-            usersTable.list({
-              orderBy: { createdAt: 'asc' },
-              limit: 500,
-            }),
+        const data = await getSchedulerData()
+        const devRole = getDevRole()
 
-            scheduleTable.list({
-              limit: 1000,
-            }),
-
-            ptoTable.list({
-              limit: 1000,
-            }),
-          ])
-
-        setUsers(usersResult)
-        setScheduleEntries(scheduleResult)
-        setPtoRequests(ptoResult)
+        setAccessLevel(devRole || data.accessLevel)
+        setUsers(data.users)
+        setScheduleEntries(data.scheduleEntries)
+        setPtoRequests(data.ptoRequests)
       } catch (error) {
+        setAccessLevel('user')
+
         toast.error('Could not load scheduler', {
           description:
             error instanceof Error
@@ -241,15 +193,15 @@ function SchedulerPage() {
     }
 
     load()
-  }, [user, usersTable, scheduleTable, ptoTable])
+  }, [userId])
 
   const calendarDates = useMemo(
     () =>
       datesBetween(
         startOfCalendar(currentMonth),
-        endOfCalendar(currentMonth)
+        endOfCalendar(currentMonth),
       ),
-    [currentMonth]
+    [currentMonth],
   )
 
   const monthLabel = currentMonth.toLocaleDateString(
@@ -257,31 +209,32 @@ function SchedulerPage() {
     {
       month: 'long',
       year: 'numeric',
-    }
+    },
   )
 
-  const userName = (userId: string) =>
-    users.find(item => item.id === userId)?.displayName ||
-    users.find(item => item.id === userId)?.email ||
-    userId
+  const userName = (requestedUserId: string) =>
+    users.find(item => item.id === requestedUserId)
+      ?.displayName ||
+    users.find(item => item.id === requestedUserId)
+      ?.email ||
+    requestedUserId
 
   const openNewShift = (date?: string) => {
     if (!canEditSchedule(accessLevel)) return
 
-    const shift =
-      date
-        ? ({
-            id: '',
-            userId: user?.id || '',
-            shiftDate: date,
-            startTime: '08:00',
-            endTime: '16:00',
-            title: 'Regular shift',
-            notes: '',
-            createdAt: '',
-            updatedAt: '',
-          } as ScheduleEntry)
-        : null
+    const shift = date
+      ? ({
+          id: '',
+          userId: user?.id || '',
+          shiftDate: date,
+          startTime: '08:00',
+          endTime: '16:00',
+          title: 'Regular shift',
+          notes: '',
+          createdAt: '',
+          updatedAt: '',
+        } as ScheduleEntry)
+      : null
 
     setEditingEntry(shift)
     setShowShiftEditor(true)
@@ -291,47 +244,34 @@ function SchedulerPage() {
     if (!canEditSchedule(accessLevel) || !user) return
 
     try {
-      const now = new Date().toISOString()
-
-      if (entry.id) {
-        const updated = await scheduleTable.update(
-          entry.id,
-          {
-            userId: entry.userId,
-            shiftDate: entry.shiftDate,
-            startTime: entry.startTime,
-            endTime: entry.endTime,
-            title: entry.title,
-            notes: entry.notes || null,
-            updatedAt: now,
-          }
-        )
-
-        setScheduleEntries(current =>
-          current.map(item =>
-            item.id === entry.id ? updated : item
-          )
-        )
-      } else {
-        const created = await scheduleTable.create({
+      const saved = await saveScheduleEntry({
+        data: {
+          id: entry.id || null,
           userId: entry.userId || user.id,
           shiftDate: entry.shiftDate,
           startTime: entry.startTime,
           endTime: entry.endTime,
           title: entry.title,
           notes: entry.notes || null,
-          createdAt: now,
-          updatedAt: now,
-        } as unknown as ScheduleEntry)
+        },
+      })
 
+      if (entry.id) {
+        setScheduleEntries(current =>
+          current.map(item =>
+            item.id === entry.id ? saved : item,
+          ),
+        )
+      } else {
         setScheduleEntries(current => [
-          created,
+          saved,
           ...current,
         ])
       }
 
       setShowShiftEditor(false)
       setEditingEntry(null)
+
       toast.success('Schedule saved')
     } catch (error) {
       toast.error('Could not save schedule entry', {
@@ -352,21 +292,14 @@ function SchedulerPage() {
     if (!user) return
 
     try {
-      const now = new Date().toISOString()
-
-      const created = await ptoTable.create({
-        userId: user.id,
-        ptoType: data.ptoType,
-        startDate: data.startDate,
-        endDate: data.endDate,
-        notes: data.notes || null,
-        status: 'Pending',
-        reviewedBy: null,
-        reviewedAt: null,
-        reviewNotes: null,
-        createdAt: now,
-        updatedAt: now,
-      } as unknown as PtoRequest)
+      const created = await createPtoRequest({
+        data: {
+          ptoType: data.ptoType,
+          startDate: data.startDate,
+          endDate: data.endDate,
+          notes: data.notes || null,
+        },
+      })
 
       setPtoRequests(current => [
         created,
@@ -388,27 +321,22 @@ function SchedulerPage() {
 
   const reviewPto = async (
     request: PtoRequest,
-    decision: 'Approved' | 'Denied'
+    decision: 'Approved' | 'Denied',
   ) => {
     if (!canEditSchedule(accessLevel) || !user) return
 
     try {
-      const now = new Date().toISOString()
-
-      const updated = await ptoTable.update(
-        request.id,
-        {
-          status: decision,
-          reviewedBy: user.id,
-          reviewedAt: now,
-          updatedAt: now,
-        }
-      )
+      const updated = await reviewPtoRequest({
+        data: {
+          requestId: request.id,
+          decision,
+        },
+      })
 
       setPtoRequests(current =>
         current.map(item =>
-          item.id === request.id ? updated : item
-        )
+          item.id === request.id ? updated : item,
+        ),
       )
 
       setSelectedPtoRequest(null)
@@ -416,7 +344,7 @@ function SchedulerPage() {
       toast.success(
         decision === 'Approved'
           ? 'Time off approved'
-          : 'Time off request denied'
+          : 'Time off request denied',
       )
     } catch (error) {
       toast.error('Could not update request', {
@@ -472,7 +400,9 @@ function SchedulerPage() {
             </Button>
 
             {canEditSchedule(accessLevel) && (
-              <Button onClick={() => openNewShift()}>
+              <Button
+                onClick={() => openNewShift()}
+              >
                 <Plus className="size-4" />
                 Add shift
               </Button>
@@ -497,8 +427,8 @@ function SchedulerPage() {
                       new Date(
                         current.getFullYear(),
                         current.getMonth() - 1,
-                        1
-                      )
+                        1,
+                      ),
                   )
                 }
               >
@@ -508,7 +438,9 @@ function SchedulerPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentMonth(new Date())}
+                onClick={() =>
+                  setCurrentMonth(new Date())
+                }
               >
                 Today
               </Button>
@@ -522,8 +454,8 @@ function SchedulerPage() {
                       new Date(
                         current.getFullYear(),
                         current.getMonth() + 1,
-                        1
-                      )
+                        1,
+                      ),
                   )
                 }
               >
@@ -553,18 +485,23 @@ function SchedulerPage() {
 
               {calendarDates.map(date => {
                 const dateString = formatDate(date)
+
                 const inMonth =
-                  date.getMonth() === currentMonth.getMonth()
+                  date.getMonth() ===
+                    currentMonth.getMonth() &&
+                  date.getFullYear() ===
+                    currentMonth.getFullYear()
 
                 const entries = scheduleEntries.filter(
-                  entry => entry.shiftDate === dateString
+                  entry =>
+                    entry.shiftDate === dateString,
                 )
 
                 const approvedPto = ptoRequests.filter(
                   request =>
                     request.status === 'Approved' &&
                     request.startDate <= dateString &&
-                    request.endDate >= dateString
+                    request.endDate >= dateString,
                 )
 
                 return (
@@ -611,10 +548,11 @@ function SchedulerPage() {
                           onClick={() => {
                             if (
                               !canEditSchedule(
-                                accessLevel
+                                accessLevel,
                               )
-                            )
+                            ) {
                               return
+                            }
 
                             setEditingEntry(entry)
                             setShowShiftEditor(true)
@@ -661,6 +599,7 @@ function SchedulerPage() {
                 <CardTitle className="text-base">
                   My time-off requests
                 </CardTitle>
+
                 <p className="mt-1 text-xs text-muted-foreground">
                   Requests you have submitted.
                 </p>
@@ -668,7 +607,9 @@ function SchedulerPage() {
 
               <Button
                 size="sm"
-                onClick={() => setShowPtoEditor(true)}
+                onClick={() =>
+                  setShowPtoEditor(true)
+                }
               >
                 <Plus className="size-3.5" />
                 Request
@@ -677,11 +618,12 @@ function SchedulerPage() {
 
             <CardContent className="space-y-2">
               {ptoRequests.filter(
-                request => request.userId === user.id
+                request => request.userId === user.id,
               ).length ? (
                 ptoRequests
                   .filter(
-                    request => request.userId === user.id
+                    request =>
+                      request.userId === user.id,
                   )
                   .map(request => (
                     <div
@@ -718,6 +660,7 @@ function SchedulerPage() {
                 <CardTitle className="text-base">
                   Pending approvals
                 </CardTitle>
+
                 <p className="mt-1 text-xs text-muted-foreground">
                   Review employee time-off requests.
                 </p>
@@ -725,18 +668,22 @@ function SchedulerPage() {
 
               <CardContent className="space-y-2">
                 {ptoRequests.filter(
-                  request => request.status === 'Pending'
+                  request =>
+                    request.status === 'Pending',
                 ).length ? (
                   ptoRequests
                     .filter(
-                      request => request.status === 'Pending'
+                      request =>
+                        request.status === 'Pending',
                     )
                     .map(request => (
                       <button
                         key={request.id}
                         type="button"
                         onClick={() =>
-                          setSelectedPtoRequest(request)
+                          setSelectedPtoRequest(
+                            request,
+                          )
                         }
                         className="w-full rounded-lg border border-border p-3 text-left hover:bg-muted/30"
                       >
@@ -777,7 +724,9 @@ function SchedulerPage() {
 
       {showPtoEditor && (
         <PtoRequestEditor
-          onClose={() => setShowPtoEditor(false)}
+          onClose={() =>
+            setShowPtoEditor(false)
+          }
           onSubmit={submitPtoRequest}
         />
       )}
@@ -785,13 +734,23 @@ function SchedulerPage() {
       {selectedPtoRequest && (
         <PtoReviewDialog
           request={selectedPtoRequest}
-          userName={userName(selectedPtoRequest.userId)}
-          onClose={() => setSelectedPtoRequest(null)}
+          userName={userName(
+            selectedPtoRequest.userId,
+          )}
+          onClose={() =>
+            setSelectedPtoRequest(null)
+          }
           onApprove={() =>
-            reviewPto(selectedPtoRequest, 'Approved')
+            reviewPto(
+              selectedPtoRequest,
+              'Approved',
+            )
           }
           onDeny={() =>
-            reviewPto(selectedPtoRequest, 'Denied')
+            reviewPto(
+              selectedPtoRequest,
+              'Denied',
+            )
           }
         />
       )}
@@ -812,19 +771,20 @@ function ShiftEditor({
   onClose: () => void
   onSave: (entry: ScheduleEntry) => void
 }) {
-  const [form, setForm] = useState<ScheduleEntry>(
-    entry || {
-      id: '',
-      userId: currentUserId,
-      shiftDate: formatDate(new Date()),
-      startTime: '08:00',
-      endTime: '16:00',
-      title: 'Regular shift',
-      notes: '',
-      createdAt: '',
-      updatedAt: '',
-    }
-  )
+  const [form, setForm] =
+    useState<ScheduleEntry>(
+      entry || {
+        id: '',
+        userId: currentUserId,
+        shiftDate: formatDate(new Date()),
+        startTime: '08:00',
+        endTime: '16:00',
+        title: 'Regular shift',
+        notes: '',
+        createdAt: '',
+        updatedAt: '',
+      },
+    )
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -834,6 +794,7 @@ function ShiftEditor({
             <p className="text-xs uppercase tracking-wider text-muted-foreground">
               Schedule
             </p>
+
             <h2 className="text-xl font-semibold">
               {entry ? 'Edit shift' : 'Add shift'}
             </h2>
@@ -850,7 +811,9 @@ function ShiftEditor({
 
         <div className="grid gap-4">
           <label className="space-y-1.5">
-            <span className="text-xs font-medium">Employee</span>
+            <span className="text-xs font-medium">
+              Employee
+            </span>
 
             <select
               className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
@@ -871,7 +834,10 @@ function ShiftEditor({
           </label>
 
           <label className="space-y-1.5">
-            <span className="text-xs font-medium">Date</span>
+            <span className="text-xs font-medium">
+              Date
+            </span>
+
             <Input
               type="date"
               value={form.shiftDate}
@@ -886,7 +852,10 @@ function ShiftEditor({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="space-y-1.5">
-              <span className="text-xs font-medium">Start</span>
+              <span className="text-xs font-medium">
+                Start
+              </span>
+
               <Input
                 type="time"
                 value={form.startTime}
@@ -900,7 +869,10 @@ function ShiftEditor({
             </label>
 
             <label className="space-y-1.5">
-              <span className="text-xs font-medium">End</span>
+              <span className="text-xs font-medium">
+                End
+              </span>
+
               <Input
                 type="time"
                 value={form.endTime}
@@ -915,7 +887,10 @@ function ShiftEditor({
           </div>
 
           <label className="space-y-1.5">
-            <span className="text-xs font-medium">Shift title</span>
+            <span className="text-xs font-medium">
+              Shift title
+            </span>
+
             <Input
               value={form.title}
               onChange={event =>
@@ -928,7 +903,10 @@ function ShiftEditor({
           </label>
 
           <label className="space-y-1.5">
-            <span className="text-xs font-medium">Notes</span>
+            <span className="text-xs font-medium">
+              Notes
+            </span>
+
             <textarea
               className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={form.notes || ''}
@@ -943,11 +921,16 @@ function ShiftEditor({
         </div>
 
         <div className="mt-6 flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
+          <Button
+            variant="ghost"
+            onClick={onClose}
+          >
             Cancel
           </Button>
 
-          <Button onClick={() => onSave(form)}>
+          <Button
+            onClick={() => onSave(form)}
+          >
             <Save className="size-4" />
             Save shift
           </Button>
@@ -969,11 +952,15 @@ function PtoRequestEditor({
     notes: string
   }) => void
 }) {
-  const [ptoType, setPtoType] = useState<PtoType>('Vacation')
+  const [ptoType, setPtoType] =
+    useState<PtoType>('Vacation')
+
   const [startDate, setStartDate] =
     useState(formatDate(new Date()))
+
   const [endDate, setEndDate] =
     useState(formatDate(new Date()))
+
   const [notes, setNotes] = useState('')
 
   return (
@@ -984,6 +971,7 @@ function PtoRequestEditor({
             <p className="text-xs uppercase tracking-wider text-muted-foreground">
               Time off
             </p>
+
             <h2 className="text-xl font-semibold">
               Request time off
             </h2>
@@ -1008,7 +996,9 @@ function PtoRequestEditor({
               className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               value={ptoType}
               onChange={event =>
-                setPtoType(event.target.value as PtoType)
+                setPtoType(
+                  event.target.value as PtoType,
+                )
               }
             >
               {PTO_TYPES.map(type => (
@@ -1029,7 +1019,9 @@ function PtoRequestEditor({
                 type="date"
                 value={startDate}
                 onChange={event =>
-                  setStartDate(event.target.value)
+                  setStartDate(
+                    event.target.value,
+                  )
                 }
               />
             </label>
@@ -1043,7 +1035,9 @@ function PtoRequestEditor({
                 type="date"
                 value={endDate}
                 onChange={event =>
-                  setEndDate(event.target.value)
+                  setEndDate(
+                    event.target.value,
+                  )
                 }
               />
             </label>
@@ -1066,7 +1060,10 @@ function PtoRequestEditor({
         </div>
 
         <div className="mt-6 flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
+          <Button
+            variant="ghost"
+            onClick={onClose}
+          >
             Cancel
           </Button>
 
@@ -1126,27 +1123,36 @@ function PtoReviewDialog({
 
         <div className="mt-5 space-y-2 text-sm">
           <p>
-            <strong>Type:</strong> {request.ptoType}
+            <strong>Type:</strong>{' '}
+            {request.ptoType}
           </p>
 
           <p>
-            <strong>Dates:</strong> {request.startDate} through{' '}
+            <strong>Dates:</strong>{' '}
+            {request.startDate} through{' '}
             {request.endDate}
           </p>
 
           {request.notes && (
             <p>
-              <strong>Notes:</strong> {request.notes}
+              <strong>Notes:</strong>{' '}
+              {request.notes}
             </p>
           )}
         </div>
 
         <div className="mt-6 flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>
+          <Button
+            variant="outline"
+            onClick={onClose}
+          >
             Cancel
           </Button>
 
-          <Button variant="outline" onClick={onDeny}>
+          <Button
+            variant="outline"
+            onClick={onDeny}
+          >
             Deny
           </Button>
 
