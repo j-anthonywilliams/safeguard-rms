@@ -577,4 +577,277 @@ export const reviewIncident = createServerFn({
     return result.rows[0]
   })
 
-  
+export const getPanelEvidence = createServerFn({
+  method: 'GET',
+}).handler(async () => {
+  const session = await getSession()
+
+  if (!session?.user) {
+    throw new Error('Not authenticated')
+  }
+
+  const db = getDb()
+
+  const result = await db.query<DashboardEvidence>(
+    `
+      SELECT
+        id,
+        user_id AS "userId",
+        item_number AS "itemNumber",
+        description,
+        location,
+        status,
+        incident_id AS "incidentId",
+        created_at AS "createdAt"
+      FROM evidence
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT 100
+    `,
+    [session.user.id],
+  )
+
+  return result.rows
+})
+
+export const createCaseFile = createServerFn({
+  method: 'POST',
+})
+  .inputValidator(
+    (data: {
+      caseNumber: string
+      title: string
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const session = await getSession()
+
+    if (!session?.user) {
+      throw new Error('Not authenticated')
+    }
+
+    const db = getDb()
+    const now = new Date().toISOString()
+
+    const result = await db.query<DashboardCaseFile>(
+      `
+        INSERT INTO case_files (
+          id,
+          user_id,
+          case_number,
+          title,
+          status,
+          lead_officer,
+          created_at,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING
+          id,
+          user_id AS "userId",
+          case_number AS "caseNumber",
+          title,
+          status,
+          lead_officer AS "leadOfficer",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+      `,
+      [
+        crypto.randomUUID(),
+        session.user.id,
+        data.caseNumber.trim(),
+        data.title.trim(),
+        'Open',
+        session.user.id,
+        now,
+        now,
+      ],
+    )
+
+    return result.rows[0]
+  })
+
+export const createEquipment = createServerFn({
+  method: 'POST',
+})
+  .inputValidator(
+    (data: {
+      name: string
+      serialNumber: string
+      assignedTo: string
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const session = await getSession()
+
+    if (!session?.user) {
+      throw new Error('Not authenticated')
+    }
+
+    const db = getDb()
+    const now = new Date().toISOString()
+
+    const result = await db.query<DashboardEquipment>(
+      `
+        INSERT INTO equipment (
+          id,
+          user_id,
+          name,
+          serial_number,
+          status,
+          assigned_to,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING
+          id,
+          user_id AS "userId",
+          name,
+          serial_number AS "serialNumber",
+          status,
+          assigned_to AS "assignedTo",
+          updated_at AS "updatedAt"
+      `,
+      [
+        crypto.randomUUID(),
+        session.user.id,
+        data.name.trim(),
+        data.serialNumber.trim(),
+        'Available',
+        data.assignedTo || session.user.id,
+        now,
+      ],
+    )
+
+    return result.rows[0]
+  })
+
+export const createEvidence = createServerFn({
+  method: 'POST',
+})
+  .inputValidator(
+    (data: {
+      itemNumber: string
+      description: string
+      location: string
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const session = await getSession()
+
+    if (!session?.user) {
+      throw new Error('Not authenticated')
+    }
+
+    const db = getDb()
+    const now = new Date().toISOString()
+
+    const evidenceResult = await db.query<DashboardEvidence>(
+      `
+        INSERT INTO evidence (
+          id,
+          user_id,
+          item_number,
+          description,
+          location,
+          status,
+          created_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING
+          id,
+          user_id AS "userId",
+          item_number AS "itemNumber",
+          description,
+          location,
+          status,
+          incident_id AS "incidentId",
+          created_at AS "createdAt"
+      `,
+      [
+        crypto.randomUUID(),
+        session.user.id,
+        data.itemNumber.trim(),
+        data.description.trim(),
+        data.location.trim(),
+        'In custody',
+        now,
+      ],
+    )
+
+    const evidence = evidenceResult.rows[0]
+
+    await db.query(
+      `
+        INSERT INTO custody_events (
+          id,
+          user_id,
+          evidence_id,
+          action,
+          actor,
+          note,
+          event_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `,
+      [
+        crypto.randomUUID(),
+        session.user.id,
+        evidence.id,
+        'Item received',
+        session.user.name || session.user.email || 'Current officer',
+        'Initial intake',
+        now,
+      ],
+    )
+
+    return evidence
+  })
+
+export const updateEvidenceIncident = createServerFn({
+  method: 'POST',
+})
+  .inputValidator(
+    (data: {
+      evidenceId: string
+      incidentId: string | null
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const session = await getSession()
+
+    if (!session?.user) {
+      throw new Error('Not authenticated')
+    }
+
+    const db = getDb()
+
+    const result = await db.query<DashboardEvidence>(
+      `
+        UPDATE evidence
+        SET incident_id = $1
+        WHERE id = $2
+          AND user_id = $3
+        RETURNING
+          id,
+          user_id AS "userId",
+          item_number AS "itemNumber",
+          description,
+          location,
+          status,
+          incident_id AS "incidentId",
+          created_at AS "createdAt"
+      `,
+      [
+        data.incidentId,
+        data.evidenceId,
+        session.user.id,
+      ],
+    )
+
+    if (!result.rows[0]) {
+      throw new Error('Evidence item not found')
+    }
+
+    return result.rows[0]
+  })

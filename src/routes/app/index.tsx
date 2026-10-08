@@ -10,8 +10,13 @@ import { authClient } from '@/lib/auth-client'
 import {
   approveIncident as approveIncidentServer,
   createAttendanceLog,
+  createCaseFile,
+  createEvidence,
+  createEquipment,
   getDashboardData,
+  getPanelEvidence,
   reviewIncident as reviewIncidentServer,
+  updateEvidenceIncident,
 } from '@/lib/dashboard.functions'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -179,7 +184,7 @@ function DashboardHome() {
         })
       }
     }
-  }
+
   const reviewIncident = (incident: Incident) => { setReviewingIncident(incident); setActivePanel('review') }
   const decideIncident = async (decision: 'Approved' | 'Rejected', feedback: string) => {
     if (!reviewingIncident || !canApproveIncidents(accessLevel)) return
@@ -742,11 +747,6 @@ return (
       setEditingIncident(null)
       window.location.reload()
     }}
-    incidentTable={incidentTable}
-    caseFileTable={caseFileTable}
-    equipmentTable={equipmentTable}
-    evidenceTable={evidenceTable}
-    eventTable={eventTable}
   />
 )}
 
@@ -829,7 +829,7 @@ function LoginGate() {
   )
 }
 
-function Panel({ type, userId, accessLevel, directoryUsers, initialIncident, onClose, onSaved, incidentTable, caseFileTable, equipmentTable, evidenceTable, eventTable }: { type: 'incident' | 'equipment' | 'evidence' | 'case'; userId: string; accessLevel: AccessLevel; directoryUsers: { id: string; email: string; displayName?: string | null }[]; initialIncident?: Incident | null; onClose: () => void; onSaved: () => void; incidentTable: ReturnType<typeof blink.db.table<Incident>>; caseFileTable: ReturnType<typeof blink.db.table<CaseFile>>; equipmentTable: ReturnType<typeof blink.db.table<Equipment>>; evidenceTable: ReturnType<typeof blink.db.table<Evidence>>; eventTable: ReturnType<typeof blink.db.table<CustodyEvent>> }) {
+function Panel({ type, userId, accessLevel, directoryUsers, initialIncident, onClose, onSaved}: userId: string; accessLevel: AccessLevel; directoryUsers: { id: string; email: string; displayName?: string | null }[]; initialIncident?: Incident | null; onClose: () => void; onSaved: () => void; incidentTable: ReturnType<typeof blink.db.table<Incident>>; caseFileTable: ReturnType<typeof blink.db.table<CaseFile>>; equipmentTable: ReturnType<typeof blink.db.table<Equipment>>; evidenceTable: ReturnType<typeof blink.db.table<Evidence>>; eventTable: ReturnType<typeof blink.db.table<CustodyEvent>> }) {
   const [saving, setSaving] = useState(false)
   const [availableEvidence, setAvailableEvidence] = useState<Evidence[]>([])
   const [selectedEvidenceIds, setSelectedEvidenceIds] = useState<string[]>([])
