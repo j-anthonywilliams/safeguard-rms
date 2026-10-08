@@ -764,7 +764,6 @@ function LoginGate() {
 
   const openSignIn = () => {
     setBusy(true)
-    blink.auth.login()
   }
 
   return (
@@ -829,7 +828,27 @@ function LoginGate() {
   )
 }
 
-function Panel({ type, userId, accessLevel, directoryUsers, initialIncident, onClose, onSaved}: userId: string; accessLevel: AccessLevel; directoryUsers: { id: string; email: string; displayName?: string | null }[]; initialIncident?: Incident | null; onClose: () => void; onSaved: () => void; incidentTable: ReturnType<typeof blink.db.table<Incident>>; caseFileTable: ReturnType<typeof blink.db.table<CaseFile>>; equipmentTable: ReturnType<typeof blink.db.table<Equipment>>; evidenceTable: ReturnType<typeof blink.db.table<Evidence>>; eventTable: ReturnType<typeof blink.db.table<CustodyEvent>> }) {
+function Panel({
+  type,
+  userId,
+  accessLevel,
+  directoryUsers,
+  initialIncident,
+  onClose,
+  onSaved,
+}: {
+  type: 'incident' | 'equipment' | 'evidence' | 'case'
+  userId: string
+  accessLevel: AccessLevel
+  directoryUsers: {
+    id: string
+    email: string
+    displayName?: string | null
+  }[]
+  initialIncident?: Incident | null
+  onClose: () => void
+  onSaved: () => void
+}) {
   const [saving, setSaving] = useState(false)
   const [availableEvidence, setAvailableEvidence] = useState<Evidence[]>([])
   const [selectedEvidenceIds, setSelectedEvidenceIds] = useState<string[]>([])
@@ -844,13 +863,31 @@ function Panel({ type, userId, accessLevel, directoryUsers, initialIncident, onC
   const [caseTitle, setCaseTitle] = useState('')
   const [caseNumber, setCaseNumber] = useState('')
   const [codeDispositions, setCodeDispositions] = useState<CodeDisposition[]>(() => initialIncident ? parseCodeDispositions(initialIncident) : [{ code: '', disposition: '' }])
+  
   useEffect(() => {
     if (type !== 'incident') return
-    evidenceTable.list({ where: { userId }, orderBy: { createdAt: 'desc' }, limit: 100 }).then(rows => {
-      setAvailableEvidence(rows)
-      setSelectedEvidenceIds(initialIncident ? rows.filter(item => item.incidentId === initialIncident.id).map(item => item.id) : [])
-    }).catch((error: Error) => toast.error('Could not load property items', { description: error.message }))
-  }, [type, userId, initialIncident, evidenceTable])
+
+    getPanelEvidence()
+      .then(rows => {
+        setAvailableEvidence(rows)
+
+        setSelectedEvidenceIds(
+          initialIncident
+            ? rows
+                .filter(
+                  item => item.incidentId === initialIncident.id,
+                )
+                .map(item => item.id)
+            : [],
+        )
+      })
+      .catch((error: Error) =>
+        toast.error('Could not load property items', {
+          description: error.message,
+        }),
+      )
+  }, [type, initialIncident])
+  
   const toggleEvidence = (evidenceId: string) => setSelectedEvidenceIds(current => current.includes(evidenceId) ? current.filter(id => id !== evidenceId) : [...current, evidenceId])
   const updatePair = (index: number, key: keyof CodeDisposition, value: string) => setCodeDispositions(current => current.map((pair, pairIndex) => pairIndex === index ? { ...pair, [key]: value } : pair))
   const addPair = () => setCodeDispositions(current => [...current, { code: '', disposition: '' }])
@@ -863,9 +900,28 @@ function Panel({ type, userId, accessLevel, directoryUsers, initialIncident, onC
     if (type === 'case') {
       if (!caseNumber.trim() || !caseTitle.trim()) { toast.error('Complete the case fields', { description: 'Case number and title are required.' }); return }
       setSaving(true)
-      try { await caseFileTable.create({ userId, caseNumber: caseNumber.trim(), title: caseTitle.trim(), status: 'Open', leadOfficer: userId, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }); toast.success('Case file created'); onSaved() } catch (error) { toast.error('Could not save case file', { description: error instanceof Error ? error.message : 'Please try again.' }) } finally { setSaving(false) }
-      return
-    }
+        try {
+          await createCaseFile({
+            data: {
+              caseNumber: caseNumber.trim(),
+              title: caseTitle.trim(),
+            },
+          })
+
+          toast.success('Case file created')
+          onSaved()
+        } catch (error) {
+          toast.error('Could not save case file', {
+            description:
+              error instanceof Error
+                ? error.message
+                : 'Please try again.',
+          })
+        } finally {
+          setSaving(false)
+        }
+
+        return
     const requiredFields = type === 'incident'
       ? [['location', 'Location'], ['city', 'City'], ['state', 'State'], ['zipCode', 'ZIP code'], ['subjectName', 'Subject name'], ['narrative', 'Narrative']]
       : type === 'equipment'
@@ -905,3 +961,4 @@ function Panel({ type, userId, accessLevel, directoryUsers, initialIncident, onC
   }
   return <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/30 p-0 backdrop-blur-sm sm:items-center sm:p-5"><div className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-t-2xl border border-border bg-card p-5 shadow-lg sm:rounded-2xl sm:p-7"><div className="mb-6 flex items-start justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary">Secure data entry · {ACCESS_LABELS[accessLevel]}</p><h2 className="mt-1 font-serif text-2xl">{type === 'case' ? 'New case file' : type === 'incident' ? (initialIncident ? 'Edit incident report' : 'New incident report') : type === 'equipment' ? 'Add equipment asset' : 'Log property / evidence'}</h2><p className="mt-2 text-sm text-muted-foreground">{type === 'case' ? 'Create a case file to organize related incident reports.' : type === 'incident' ? 'Capture the facts, flags, codes, disposition, and narrative in one review-ready record.' : 'Required fields are marked by the save validation.'}</p></div><Button variant="ghost" size="icon" onClick={onClose} aria-label="Close"><X className="size-4" /></Button></div><div className="grid gap-4 sm:grid-cols-2">{type === 'case' ? <><div className="sm:col-span-2">{field('Case number', 'caseNumber', 'CASE-2026-0001')}</div><div className="sm:col-span-2">{field('Case title', 'caseTitle', 'Burglary investigation')}</div></> : type === 'incident' ? <><div className="sm:col-span-2 grid gap-4 sm:grid-cols-2">{field('Report number', 'reportNumber', 'Auto-generated if blank')}{field('Incident date', 'incidentDate', '', 'date')}</div>{field('Location', 'location', '123 Main St / sector 4')}{field('City', 'city', 'Springfield')}{field('State', 'state', 'CA')}{field('ZIP code', 'zipCode', '90210')}{field('Subject name', 'subjectName', 'Full legal name')}{field('Contact phone', 'subjectPhone', '(555) 000-0000', 'tel')}{field('Date of birth', 'subjectDob', 'MM / DD / YYYY')}<div className="grid gap-3 rounded-lg border border-border bg-muted/20 p-3 sm:col-span-2 sm:grid-cols-2"><p className="text-xs font-medium sm:col-span-2">Report flags</p><label className="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={form.violentFlag === '1'} onChange={event => setForm(prev => ({ ...prev, violentFlag: event.target.checked ? '1' : '' }))} className="size-4 accent-primary" />Violent subject / incident</label><label className="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={form.banBarFlag === '1'} onChange={event => setForm(prev => ({ ...prev, banBarFlag: event.target.checked ? '1' : '' }))} className="size-4 accent-primary" />Ban / bar flag</label></div><div className="space-y-3 sm:col-span-2"><div className="flex items-center justify-between"><div><p className="text-xs font-medium">Incident codes and dispositions</p><p className="text-xs text-muted-foreground">Pair every code with the action or outcome it received.</p></div><Button type="button" variant="outline" size="sm" onClick={addPair}><Plus className="size-3.5" />Add pair</Button></div>{codeDispositions.map((pair, index) => <div key={`pair-${index}`} className="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 sm:grid-cols-[1fr_1.4fr_auto]"><Input value={pair.code} onChange={event => updatePair(index, 'code', event.target.value)} placeholder="Code e.g. 240" aria-label={`Incident code ${index + 1}`} /><Input value={pair.disposition} onChange={event => updatePair(index, 'disposition', event.target.value)} placeholder="Corresponding disposition" aria-label={`Disposition for code ${index + 1}`} /><Button type="button" variant="ghost" size="icon" onClick={() => removePair(index)} disabled={codeDispositions.length === 1} aria-label={`Remove code ${index + 1}`}><X className="size-4" /></Button></div>)}</div><div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3 sm:col-span-2"><div><p className="text-xs font-medium">Associated property / evidence</p><p className="text-xs text-muted-foreground">Select one or more items tied to this report.</p></div>{availableEvidence.length ? <div className="grid gap-2 sm:grid-cols-2">{availableEvidence.map(item => <label key={item.id} className="flex cursor-pointer items-start gap-3 rounded-md border border-border bg-card p-3 text-sm transition-colors hover:bg-muted/40"><input type="checkbox" checked={selectedEvidenceIds.includes(item.id)} onChange={() => toggleEvidence(item.id)} className="mt-0.5 size-4 accent-primary" /><span className="min-w-0"><span className="block font-medium">{item.itemNumber}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{item.description} · {item.location}</span></span></label>)}</div> : <p className="text-xs text-muted-foreground">No property items yet. Log property first, then associate it here.</p>}</div><label className="space-y-1.5 sm:col-span-2"><span className="text-xs font-medium">Narrative</span><textarea className="min-h-36 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none ring-ring focus-visible:ring-[3px]" placeholder="Document the facts, sequence, witnesses, and actions taken…" value={form.narrative || ''} onChange={update('narrative')} /></label></> : type === 'equipment' ? <>{field('Equipment name', 'name', 'Body camera / radio / kit')}{field('Serial number', 'serialNumber', 'Asset identifier')}{equipmentAssignment}</> : <>{field('Item number', 'itemNumber', 'EV-2026-0001')}{field('Description', 'description', 'Describe the item and packaging')}{field('Found / stored location', 'location', 'Evidence locker / room')}</>}</div><div className="mt-7 flex justify-end gap-2 border-t border-border pt-5"><Button variant="ghost" onClick={onClose}>Cancel</Button><Button onClick={save} disabled={saving}>{saving ? 'Saving…' : initialIncident && type === 'incident' ? 'Update report' : 'Save securely'} <ArrowUpRight className="size-4" /></Button></div></div></div>
  }
+}
