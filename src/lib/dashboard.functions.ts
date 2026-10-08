@@ -851,3 +851,222 @@ export const updateEvidenceIncident = createServerFn({
 
     return result.rows[0]
   })
+export const saveIncident = createServerFn({
+  method: 'POST',
+})
+  .inputValidator(
+    (data: {
+      id: string | null
+      reportNumber: string
+      incidentDate: string
+      location: string
+      city: string
+      state: string
+      zipCode: string
+      subjectName: string
+      subjectPhone: string | null
+      subjectDob: string | null
+      violentFlag: number
+      banBarFlag: number
+      incidentCodes: string
+      disposition: string
+      narrative: string
+      approvalStatus: 'Pending' | 'Approved' | 'Rejected'
+      reviewFeedback: string | null
+      reviewedBy: string | null
+      reviewedAt: string | null
+      createdAt: string
+      caseFileId: string | null
+      parentIncidentId: string | null
+      reportType: string
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const session = await getSession()
+
+    if (!session?.user) {
+      throw new Error('Not authenticated')
+    }
+
+    const db = getDb()
+    const now = new Date().toISOString()
+
+    if (data.id) {
+      const result = await db.query<DashboardIncident>(
+        `
+          UPDATE incidents
+          SET
+            report_number = $1,
+            incident_date = $2,
+            location = $3,
+            city = $4,
+            state = $5,
+            zip_code = $6,
+            subject_name = $7,
+            subject_phone = $8,
+            subject_dob = $9,
+            violent_flag = $10,
+            ban_bar_flag = $11,
+            incident_codes = $12,
+            disposition = $13,
+            narrative = $14,
+            approval_status = $15,
+            review_feedback = $16,
+            reviewed_by = $17,
+            reviewed_at = $18,
+            case_file_id = $19,
+            parent_incident_id = $20,
+            report_type = $21
+          WHERE id = $22
+          RETURNING
+            id,
+            user_id AS "userId",
+            report_number AS "reportNumber",
+            incident_date AS "incidentDate",
+            location,
+            city,
+            state,
+            zip_code AS "zipCode",
+            subject_name AS "subjectName",
+            subject_phone AS "subjectPhone",
+            subject_dob AS "subjectDob",
+            violent_flag AS "violentFlag",
+            ban_bar_flag AS "banBarFlag",
+            incident_codes AS "incidentCodes",
+            disposition,
+            narrative,
+            approval_status AS "approvalStatus",
+            approved_by AS "approvedBy",
+            approved_at AS "approvedAt",
+            review_feedback AS "reviewFeedback",
+            reviewed_by AS "reviewedBy",
+            reviewed_at AS "reviewedAt",
+            created_at AS "createdAt",
+            case_file_id AS "caseFileId",
+            parent_incident_id AS "parentIncidentId",
+            report_type AS "reportType"
+        `,
+        [
+          data.reportNumber,
+          data.incidentDate,
+          data.location,
+          data.city,
+          data.state,
+          data.zipCode,
+          data.subjectName,
+          data.subjectPhone,
+          data.subjectDob,
+          data.violentFlag,
+          data.banBarFlag,
+          data.incidentCodes,
+          data.disposition,
+          data.narrative,
+          data.approvalStatus,
+          data.reviewFeedback,
+          data.reviewedBy,
+          data.reviewedAt,
+          data.caseFileId,
+          data.parentIncidentId,
+          data.reportType,
+          data.id,
+        ],
+      )
+
+      if (!result.rows[0]) {
+        throw new Error('Incident not found')
+      }
+
+      return result.rows[0]
+    }
+
+    const result = await db.query<DashboardIncident>(
+      `
+        INSERT INTO incidents (
+          id,
+          user_id,
+          report_number,
+          incident_date,
+          location,
+          city,
+          state,
+          zip_code,
+          subject_name,
+          subject_phone,
+          subject_dob,
+          violent_flag,
+          ban_bar_flag,
+          incident_codes,
+          disposition,
+          narrative,
+          approval_status,
+          review_feedback,
+          reviewed_by,
+          reviewed_at,
+          created_at,
+          case_file_id,
+          parent_incident_id,
+          report_type
+        )
+        VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8,
+          $9, $10, $11, $12, $13, $14, $15, $16,
+          $17, $18, $19, $20, $21, $22, $23, $24
+        )
+        RETURNING
+          id,
+          user_id AS "userId",
+          report_number AS "reportNumber",
+          incident_date AS "incidentDate",
+          location,
+          city,
+          state,
+          zip_code AS "zipCode",
+          subject_name AS "subjectName",
+          subject_phone AS "subjectPhone",
+          subject_dob AS "subjectDob",
+          violent_flag AS "violentFlag",
+          ban_bar_flag AS "banBarFlag",
+          incident_codes AS "incidentCodes",
+          disposition,
+          narrative,
+          approval_status AS "approvalStatus",
+          approved_by AS "approvedBy",
+          approved_at AS "approvedAt",
+          review_feedback AS "reviewFeedback",
+          reviewed_by AS "reviewedBy",
+          reviewed_at AS "reviewedAt",
+          created_at AS "createdAt",
+          case_file_id AS "caseFileId",
+          parent_incident_id AS "parentIncidentId",
+          report_type AS "reportType"
+      `,
+      [
+        crypto.randomUUID(),
+        session.user.id,
+        data.reportNumber,
+        data.incidentDate || now.slice(0, 10),
+        data.location,
+        data.city,
+        data.state,
+        data.zipCode,
+        data.subjectName,
+        data.subjectPhone,
+        data.subjectDob,
+        data.violentFlag,
+        data.banBarFlag,
+        data.incidentCodes,
+        data.disposition,
+        data.narrative,
+        data.approvalStatus,
+        data.reviewFeedback,
+        data.reviewedBy,
+        data.reviewedAt,
+        data.createdAt || now,
+        data.caseFileId,
+        data.parentIncidentId,
+        data.reportType,
+      ],
+    )
+
+    return result.rows[0]
+  })
