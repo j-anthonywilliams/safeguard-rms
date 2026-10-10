@@ -33,7 +33,15 @@ import {
 } from '@/lib/access-control'
 import type { AccessLevel } from '@/lib/access-control'
 import { getDevRole } from '@/lib/dev-accounts'
-import { getUserDirectory } from '@/lib/users.functions'
+import {
+  getUserDirectory,
+  getCurrentUserRole,
+  updateUserRole,
+  updateUserProfile,
+  archiveUserAccount,
+  restoreUserAccount,
+} from '@/lib/users.functions'
+import { authClient } from '@/lib/auth-client'
 
 interface DirectoryUser {
   id: string
@@ -122,42 +130,74 @@ function UserManagementPage() {
   const invitationsTable = useMemo(() => blink.db.table<PendingInvitation>('pending_user_invitations'), [])
 
   useEffect(() => {
-    return blink.auth.onAuthStateChanged((state) => {
-      setCurrentUser(state.user)
+    let active = true
 
-      if (!state.isLoading) {
-        setAuthLoading(false)
+    const loadSession = async () => {
+      try {
+        const { data, error } = await authClient.getSession()
+
+        if (!active) return
+
+        if (error) {
+          throw new Error(error.message || 'Unable to load session')
+        }
+
+        setCurrentUser(
+          data?.user
+            ? {
+                id: data.user.id,
+                email: data.user.email,
+                displayName: data.user.name,
+              }
+            : null
+        )
+      } catch (error) {
+        console.error('Authentication error:', error)
+
+        if (active) {
+          setCurrentUser(null)
+        }
+      } finally {
+        if (active) {
+          setAuthLoading(false)
+        }
       }
-    })
+    }
+
+    void loadSession()
+
+    return () => {
+      active = false
+    }
   }, [])
 
   useEffect(() => {
     if (!currentUser) return
 
+    let active = true
+
     const initializeAccess = async () => {
-      const devRole = getDevRole()
-
-      if (devRole) {
-        setAccessLevel(devRole)
-        return
-      }
-
       try {
-        const rows = await rolesTable.list({
-          where: {
-            userId: currentUser.id,
-          },
-          limit: 1,
-        })
+        const result = await getCurrentUserRole()
 
-        setAccessLevel(rows[0]?.role || 'user')
-      } catch {
-        setAccessLevel('user')
+        if (active) {
+          setAccessLevel(result.role)
+        }
+      } catch (error) {
+        console.error('Could not load user role:', error)
+
+        if (active) {
+          setAccessLevel('user')
+        }
       }
     }
 
-    initializeAccess()
-  }, [currentUser, rolesTable])
+    void initializeAccess()
+
+    return () => {
+      active = false
+    }
+  }, [currentUser])
 
   const loadDirectory = async () => {
     if (!currentUser) return
@@ -287,61 +327,44 @@ function UserManagementPage() {
     user: DirectoryUser,
     targetRole: AccessLevel
   ) => {
-    const currentRole =
-      roleByUser.get(user.id) || 'user'
+    const currentRole = roleByUser.get(user.id) || 'user'
 
-    if (targetRole === currentRole) {
-      return
-    }
+    if (targetRole === currentRole) return
 
     if (!canGrantRole(accessLevel, targetRole)) {
       toast.error('Not authorized', {
-        description:
-          `You cannot grant ${ACCESS_LABELS[targetRole]} access.`,
+        description: `You cannot grant ${ACCESS_LABELS[targetRole]} access.`,
       })
       return
     }
-
-    const existing = roles.find(
-      item => item.userId === user.id
-    )
 
     try {
       setBusy(true)
 
-      const now = new Date().toISOString()
-
-      if (existing) {
-        await rolesTable.update(existing.id, {
-          role: targetRole,
-          updatedAt: now,
-        })
-      } else {
-        await rolesTable.create({
-          id: crypto.randomUUID(),
+      await updateUserRole({
+        data: {
           userId: user.id,
           role: targetRole,
-          createdAt: now,
-          updatedAt: now,
-        })
-      }
+        },
+      })
 
       await loadDirectory()
 
       toast.success('Permission updated', {
-        description:
-          `${user.displayName || user.email} is now ${ACCESS_LABELS[targetRole]}.`,
+        description: `${user.displayName || user.email} is now ${ACCESS_LABELS[targetRole]}.`,
       })
-      } catch (error) {
-        console.error('UPDATE ROLE ERROR:', error)
+    } catch (error) {
+      console.error('UPDATE ROLE ERROR:', error)
 
-        toast.error('Could not update permissions', {
-          description:
-            error instanceof Error
-              ? error.message
-              : JSON.stringify(error),
-        })
-      }
+      toast.error('Could not update permissions', {
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Please try again.',
+      })
+    } finally {
+      setBusy(false)
+    }
   }
 
   const openEditProfile = (user: DirectoryUser) => {
@@ -358,9 +381,12 @@ function UserManagementPage() {
     try {
       setSavingProfile(true)
 
-      await usersTable.update(editingUser.id, {
-        displayName: editName.trim(),
-        phone: editPhone.trim(),
+      await updateUserProfile({
+        data: {
+          userId: editingUser.id,
+          displayName: editName.trim(),
+          phone: editPhone.trim(),
+        },
       })
 
       await loadDirectory()
@@ -396,11 +422,8 @@ function UserManagementPage() {
 
       const now = new Date().toISOString()
 
-      await usersTable.update(user.id, {
-        isArchived: 1,
-        archivedAt: now,
-        archivedBy: currentUser?.id || null,
-        updatedAt: now,
+      await archiveUserAccount({
+        data: { userId: user.id },
       })
 
       await loadDirectory()
@@ -425,11 +448,8 @@ function UserManagementPage() {
     try {
       setBusy(true)
 
-      await usersTable.update(user.id, {
-        isArchived: 0,
-        archivedAt: null,
-        archivedBy: null,
-        updatedAt: new Date().toISOString(),
+      await restoreUserAccount({
+        data: { userId: user.id },
       })
 
       await loadDirectory()

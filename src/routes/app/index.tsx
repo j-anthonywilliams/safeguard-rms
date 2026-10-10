@@ -763,8 +763,22 @@ function ActionCard({ icon, title, description, action, onClick, children }: { i
 function LoginGate() {
   const [busy, setBusy] = useState(false)
 
-  const openSignIn = () => {
+  const openSignIn = async () => {
     setBusy(true)
+
+    try {
+      const { error } = await authClient.signIn.social({
+        provider: 'google',
+        callbackURL: '/app',
+      })
+
+      if (error) {
+        throw new Error(error.message || 'Google sign-in failed')
+      }
+    } catch (error) {
+      console.error('Google sign-in error:', error)
+      setBusy(false)
+    }
   }
 
   return (

@@ -23,12 +23,27 @@ function getPool() {
 }
 
 function createAuth() {
+  const googleClientId = process.env.GOOGLE_CLIENT_ID
+  const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
+
   return betterAuth({
+    baseURL: process.env.BETTER_AUTH_URL,
     database: getPool(),
 
     emailAndPassword: {
       enabled: true,
     },
+
+    socialProviders:
+      googleClientId && googleClientSecret
+        ? {
+            google: {
+              clientId: googleClientId,
+              clientSecret: googleClientSecret,
+              disableImplicitSignUp: process.env.NODE_ENV !== 'development',
+            },
+          }
+        : {},
 
     plugins: [tanstackStartCookies()],
   })
@@ -37,6 +52,7 @@ function createAuth() {
 export function getAuth() {
   return (authInstance ??= createAuth())
 }
+export const auth = getAuth()
 
 export async function getSession() {
   return getAuth().api.getSession({
