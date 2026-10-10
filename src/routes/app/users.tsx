@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { blink } from '@/blink/client'
 import { BlinkClientBoundary } from '@/components/BlinkClientBoundary'
 import {
   Button,
@@ -40,6 +39,8 @@ import {
   updateUserProfile,
   archiveUserAccount,
   restoreUserAccount,
+  createUserInvitation,
+  removeUserInvitation,
 } from '@/lib/users.functions'
 import { authClient } from '@/lib/auth-client'
 
@@ -125,9 +126,6 @@ function UserManagementPage() {
   const [editName, setEditName] = useState('')
   const [editPhone, setEditPhone] = useState('')
   const [savingProfile, setSavingProfile] = useState(false)
-  const usersTable = useMemo(() => blink.db.table<DirectoryUser>('users'), [])
-  const rolesTable = useMemo(() => blink.db.table<AppRole>('app_roles'), [])
-  const invitationsTable = useMemo(() => blink.db.table<PendingInvitation>('pending_user_invitations'), [])
 
   useEffect(() => {
     let active = true
@@ -245,7 +243,7 @@ function UserManagementPage() {
         description: error.message,
       })
     })
-  }, [accessLevel, currentUser, rolesTable,])
+  }, [accessLevel, currentUser])
 
   const roleByUser = useMemo(
     () =>
@@ -303,24 +301,11 @@ function UserManagementPage() {
     }
   }
 
-  const sendLoginLink = async (
-    email: string
-  ) => {
-    try {
-      await blink.auth.sendMagicLink(email)
-
-      toast.success('Login link sent', {
-        description:
-          `A secure login link was sent to ${email}.`,
-      })
-    } catch (error) {
-      toast.error('Could not send login link', {
-        description:
-          error instanceof Error
-            ? error.message
-            : 'Please try again.',
-      })
-    }
+  const sendLoginLink = async (_email: string) => {
+    toast.info('Login links are not configured yet', {
+      description:
+        'Users can sign in through Google. Email login links will be available after email delivery is configured.',
+    })
   }
 
   const updateRole = async (
@@ -468,70 +453,23 @@ function UserManagementPage() {
   }
 
   const deleteArchivedUser = async (
-    user: DirectoryUser
+    _user: DirectoryUser
   ) => {
-    if (Number(user.isArchived) !== 1) {
-      toast.error('User must be archived first')
-      return
-    }
-
-    const confirmed = window.confirm(
-      `Permanently delete ${user.displayName || user.email}? This cannot be undone.`
-    )
-
-    if (!confirmed) return
-
-    try {
-      setBusy(true)
-
-      const role = roles.find(
-        item => item.userId === user.id
-      )
-
-      if (role) {
-        await rolesTable.delete(role.id)
-      }
-
-      await usersTable.delete(user.id)
-
-      await loadDirectory()
-
-      toast.success('User permanently deleted')
-    } catch (error) {
-      toast.error('Could not delete user', {
-        description:
-          error instanceof Error
-            ? error.message
-            : 'Please try again.',
-      })
-    } finally {
-      setBusy(false)
-    }
+    toast.info('Permanent deletion is temporarily unavailable', {
+      description:
+        'Account deletion will be enabled after historical record preservation and authentication safeguards are implemented.',
+    })
   }
+  
   const createInvitation = async () => {
     const email = newEmail.trim().toLowerCase()
     const name = newName.trim()
 
-    if (!name || !email || busy) {
-      return
-    }
+    if (!name || !email || busy) return
 
     if (!canGrantRole(accessLevel, newRole)) {
       toast.error('Not authorized', {
-        description:
-          `You cannot grant ${ACCESS_LABELS[newRole]} access.`,
-      })
-      return
-    }
-
-    const existingUser = users.find(
-      item => item.email.toLowerCase() === email
-    )
-
-    if (existingUser) {
-      toast.error('User already exists', {
-        description:
-          'Use the existing user directory entry to change permissions.',
+        description: `You cannot grant ${ACCESS_LABELS[newRole]} access.`,
       })
       return
     }
@@ -539,23 +477,17 @@ function UserManagementPage() {
     try {
       setBusy(true)
 
-      const now = new Date().toISOString()
-
-      await invitationsTable.create({
-        id: crypto.randomUUID(),
-        email,
-        displayName: name,
-        requestedRole: newRole,
-        invitedBy: currentUser?.id || '',
-        createdAt: now,
-        updatedAt: now,
+      await createUserInvitation({
+        data: {
+          email,
+          displayName: name,
+          requestedRole: newRole,
+        },
       })
 
-      await blink.auth.sendMagicLink(email)
-
-      toast.success('User invited', {
+      toast.success('Invitation created', {
         description:
-          `${name} was invited as ${ACCESS_LABELS[newRole]}.`,
+          `${name} has been added to pending invitations. No email has been sent.`,
       })
 
       setNewName('')
@@ -576,15 +508,18 @@ function UserManagementPage() {
     }
   }
 
+
   const removeInvitation = async (
     invitation: PendingInvitation
   ) => {
     try {
       setBusy(true)
 
-      await invitationsTable.delete(
-        invitation.id
-      )
+      await removeUserInvitation({
+        data: {
+          invitationId: invitation.id,
+        },
+      })
 
       await refreshDirectory()
 

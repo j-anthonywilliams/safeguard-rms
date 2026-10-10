@@ -4,20 +4,16 @@ import viteReact from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 import fs from 'node:fs';
-// Blink Visual Editor: stamps data-blnk-id on JSX + injects iframe-side picker
 // runtime. Self-contained (no external deps) so this template stays portable.
-import { blinkTaggerPlugin } from './blink-tagger.plugin.mjs';
-
-// Blink: guarantee global CSS survives agent rewrites of src/routes/__root.tsx.
 // TanStack Start only emits a stylesheet for CSS imported by a ROUTE module, and
 // the agent frequently regenerates __root.tsx from scratch and drops the
 // `import '../index.css'` — orphaning Tailwind so the app renders unstyled. This
 // runs in-sandbox on EVERY compile (dev HMR + prerender build), so the import is
 // always present in the route module Start collects — no backend/timing
 // dependency, styled on the first render. Idempotent (skips if already imported).
-function blinkEnsureRootCss() {
+function ensureRootCss() {
   return {
-    name: 'blink-ensure-root-css',
+    name: 'ensure-root-css',
     enforce: 'pre' as const,
     transform(code: string, id: string) {
       const file = id.split('?')[0];
@@ -36,8 +32,6 @@ function blinkEnsureRootCss() {
   };
 }
 
-// Blink: make a FAILED route-tree generation visible instead of silent.
-//
 // When TanStack's generator throws (two files claiming the same path, a route file
 // with no `Route` export, a syntax error in a route), it fails inside the plugin:
 // nothing is printed where the agent or the user can see it, `routeTree.gen.ts` is
@@ -49,13 +43,13 @@ function blinkEnsureRootCss() {
 // This detects the condition generically — WITHOUT reimplementing TanStack's path
 // resolution: if a route file exists on disk but no import for it appears in the
 // generated tree, generation is failing. Vite's own ErrorPayload then puts it on the
-// dev overlay, which is both what the user sees and what Blink's preview-error
+// dev overlay, which is both what the user sees and what Better Auth's preview-error
 // channel forwards to the agent's next turn.
 //
 // Report-only and fail-open: it never edits files, never blocks the server, and any
 // error inside the check is swallowed. Debounced + re-checked so an in-flight
 // regeneration is never reported as a failure.
-function blinkRouteTreeHealth() {
+function routeTreeHealth() {
   const ROUTES_DIR = path.resolve(import.meta.dirname, './src/routes');
   const GEN_FILE = path.resolve(import.meta.dirname, './src/routeTree.gen.ts');
   const SETTLE_MS = 1200;
@@ -102,7 +96,7 @@ function blinkRouteTreeHealth() {
   }
 
   return {
-    name: 'blink-route-tree-health',
+    name: 'route-tree-health',
     apply: 'serve' as const,
     configureServer(server: import('vite').ViteDevServer) {
       let timer: NodeJS.Timeout | undefined;
@@ -117,7 +111,7 @@ function blinkRouteTreeHealth() {
         try {
           server.ws.send({
             type: 'error',
-            err: { message, stack: '', plugin: 'blink-route-tree-health', id: GEN_FILE },
+            err: { message, stack: '', plugin: 'route-tree-health', id: GEN_FILE },
           });
         } catch {
           /* fail open */
@@ -153,7 +147,7 @@ function blinkRouteTreeHealth() {
                 '(src/routes/app/) instead. Also check every route file exports ' +
                 '`const Route = createFileRoute(...)` — never `export default`.';
               report(message);
-              server.config.logger.error(`[blink] ${message}`);
+              server.config.logger.error(`[SafeGuard-RMS] ${message}`);
             } catch {
               /* fail open */
             }
@@ -198,15 +192,13 @@ function blinkRouteTreeHealth() {
 
 export default defineConfig({
   plugins: [
-    blinkEnsureRootCss(),
-    blinkRouteTreeHealth(),
+    ensureRootCss(),
+    routeTreeHealth(),
     // Tailwind v4 via the official Vite plugin. Handles `@import "tailwindcss"`
     // itself (must NOT be a PostCSS plugin here — TanStack Start's prerender build
     // runs postcss-import first and can't resolve the v4 bare import → build fails).
     tailwindcss(),
     // Build-time tagger OFF by default — its transform can stamp data-blnk-id into
-    // HTML inside string literals. Enable with BLINK_BUILD_TIME_TAGGER=on.
-    ...(process.env.BLINK_BUILD_TIME_TAGGER === 'on' ? [blinkTaggerPlugin()] : []),
     // TanStack Start — SSR + static prerendering so search engines AND AI crawlers
     // (GPTBot/ClaudeBot/PerplexityBot, which do NOT execute JS) get fully-rendered
     // HTML on the first request. `prerender` emits crawlable static HTML at build time.
@@ -230,8 +222,8 @@ export default defineConfig({
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),
     },
-    // @blinkdotnew/ui + framer-motion + R3F peers must share one React instance or hooks
-    // crash inside motion with: Cannot read properties of null (reading 'useRef')
+    // Ensure React and its dependent libraries share a single React instance
+    // to prevent duplicate React hooks and runtime errors.
     dedupe: ['react', 'react-dom'],
   },
   optimizeDeps: {
@@ -276,11 +268,9 @@ export default defineConfig({
     allowedHosts: true,
   },
   build: {
-    // Build into a clean temp dir; scripts/finalize-static-build.mjs then flattens
-    // .vite-out/client/* -> dist/ so Blink hosting serves dist/index.html
-    // (BUILD_PATHS['vite-react'] = 'dist'). Building here instead of dist/ dodges the
-    // EACCES from Start's client build emptying the platform-prepared dist/, which
-    // carried a read-only _redirects the sandbox user could not unlink (no longer injected).
+    // Build the application into a temporary output directory.
+    // The finalize-static-build script prepares the client files in dist/.
+    // Keep the server build output available for TanStack Start SSR.
     outDir: '.vite-out',
     emptyOutDir: true,
   },

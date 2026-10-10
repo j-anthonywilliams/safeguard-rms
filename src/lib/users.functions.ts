@@ -435,3 +435,151 @@ export const restoreUserAccount = createServerFn({ method: 'POST' })
 
     return { success: true }
   })
+
+  
+export const createUserInvitation = createServerFn({ method: 'POST' })
+  .inputValidator(
+    (data: {
+      email: string
+      displayName: string
+      requestedRole: AccessLevel
+    }) => data
+  )
+  .handler(async ({ data }) => {
+    const session = await getSession()
+
+    if (!session?.user) {
+      throw new Error('Authentication required')
+    }
+
+    const db = getDb()
+
+    const roleResult = await db.query<{ role: AccessLevel }>(
+      `SELECT role FROM app_roles WHERE user_id = $1 LIMIT 1`,
+      [session.user.id]
+    )
+
+    const currentRole = roleResult.rows[0]?.role ?? 'user'
+
+    if (!canGrantRole(currentRole, data.requestedRole)) {
+      throw new Error('Not authorized to assign this role')
+    }
+
+    const email = data.email.trim().toLowerCase()
+    const displayName = data.displayName.trim()
+
+    if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+      !displayName ||
+      displayName.length > 200
+    ) {
+      throw new Error('A valid email and display name are required')
+    }
+
+    const existingUser = await db.query(
+      `SELECT id FROM users WHERE LOWER(email) = $1 LIMIT 1`,
+      [email]
+    )
+
+    if (existingUser.rows.length > 0) {
+      throw new Error('This user already exists')
+    }
+
+    const existingAuthUser = await db.query(
+      `SELECT id FROM "user" WHERE LOWER(email) = $1 LIMIT 1`,
+      [email]
+    )
+
+    if (existingAuthUser.rows.length > 0) {
+      throw new Error('An authentication account already exists for this email')
+    }
+
+    const existingInvitation = await db.query(
+      `SELECT id FROM pending_user_invitations
+       WHERE LOWER(email) = $1 LIMIT 1`,
+      [email]
+    )
+
+    if (existingInvitation.rows.length > 0) {
+      throw new Error('An invitation already exists for this email')
+    }
+
+    const now = new Date().toISOString()
+    const id = randomUUID()
+
+    await db.query(
+      `
+        INSERT INTO pending_user_invitations (
+          id,
+          email,
+          display_name,
+          requested_role,
+          invited_by,
+          created_at,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $6)
+      `,
+      [
+        id,
+        email,
+        displayName,
+        data.requestedRole,
+        session.user.id,
+        now,
+      ]
+    )
+
+    return { success: true, id }
+  })
+
+export const removeUserInvitation = createServerFn({ method: 'POST' })
+  .inputValidator((data: { invitationId: string }) => data)
+  .handler(async ({ data }) => {
+    const session = await getSession()
+
+    if (!session?.user) {
+      throw new Error('Authentication required')
+    }
+
+    const db = getDb()
+
+    const roleResult = await db.query<{ role: AccessLevel }>(
+      `SELECT role FROM app_roles WHERE user_id = $1 LIMIT 1`,
+      [session.user.id]
+    )
+
+    const currentRole = roleResult.rows[0]?.role ?? 'user'
+
+    const invitationResult = await db.query<{
+      requested_role: AccessLevel
+    }>(
+      `
+        SELECT requested_role
+        FROM pending_user_invitations
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [data.invitationId]
+    )
+
+    if (invitationResult.rows.length === 0) {
+      throw new Error('Invitation not found')
+    }
+
+    if (
+      !canGrantRole(
+        currentRole,
+        invitationResult.rows[0].requested_role
+      )
+    ) {
+      throw new Error('Not authorized to remove this invitation')
+    }
+
+    await db.query(
+      `DELETE FROM pending_user_invitations WHERE id = $1`,
+      [data.invitationId]
+    )
+
+    return { success: true }
+  })
