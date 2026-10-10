@@ -39,8 +39,8 @@ const queryClient = new QueryClient()
  *
  * SSR: this document (and every route) is server-rendered/prerendered. A child
  * that reads browser-only state at render — `blink.auth`/`onAuthStateChanged`,
- * `localStorage`, `window` — must be wrapped in `<BlinkClientBoundary>`
- * (`src/components/BlinkClientBoundary.tsx`), which also covers a whole-page
+ * `localStorage`, `window` — must be wrapped in `<ClientBoundary>`
+ * (`src/components/ClientBoundary.tsx`), which also covers a whole-page
  * client tree, or the page ships blank / hydration-mismatched. Do NOT use the
  * route's `ssr: false` — a client-only route in this template hits Start's
  * server-context `node:async_hooks` path (a throwing browser stub) and ships a

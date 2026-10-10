@@ -23,7 +23,7 @@ import { SharedAppLayout } from '@/layouts/shared-app-layout'
  *
  * Auth-gate the whole shell by wrapping <Outlet /> in your auth check here — one
  * place, not per page. Browser-only state (blink.auth, localStorage, window) must
- * sit inside <BlinkClientBoundary> (wrap the whole shell if the entire app is
+ * sit inside <ClientBoundary> (wrap the whole shell if the entire app is
  * browser-only). Do NOT use the route's `ssr: false` — a client-only route in this
  * TanStack Start template hits Start's server-context `node:async_hooks` path (a
  * throwing browser stub) and ships a BLANK preview ("AsyncLocalStorage is not a

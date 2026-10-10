@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { BlinkClientBoundary } from '@/components/BlinkClientBoundary'
+import { ClientBoundary } from '@/components/ClientBoundary'
 import {
   Button,
 } from '@/components/ui/button'
@@ -90,9 +90,9 @@ export const Route = createFileRoute('/app/users')({
     ],
   }),
   component: () => (
-    <BlinkClientBoundary fallback={<LoadingShell />}>
+    <ClientBoundary fallback={<LoadingShell />}>
       <UserManagementPage />
-    </BlinkClientBoundary>
+    </ClientBoundary>
   ),
 })
 
