@@ -35,111 +35,124 @@ export const reconcileCurrentUser = createServerFn({
   const authUser = session?.user
 
   if (!authUser?.id || !authUser.email) {
-    return null
+    throw new Error('Authentication required')
   }
 
   const db = getDb()
+  const client = await db.connect()
 
-  const email = authUser.email.toLowerCase()
-  const now = new Date().toISOString()
+  try {
+    await client.query('BEGIN')
 
-  const [existingUsers, invitations, existingRoles] =
-    await Promise.all([
-      db.query<DirectoryUser>(
-        `
-          SELECT
-            id,
-            email,
-            display_name AS "displayName",
-            created_at AS "createdAt"
-          FROM users
-          WHERE id = $1
-          LIMIT 1
-        `,
-        [authUser.id],
-      ),
+    const email = authUser.email.trim().toLowerCase()
+    const now = new Date().toISOString()
 
-      db.query<PendingInvitation>(
-        `
-          SELECT
-            id,
-            email,
-            display_name AS "displayName",
-            requested_role AS "requestedRole",
-            invited_by AS "invitedBy",
-            created_at AS "createdAt",
-            updated_at AS "updatedAt"
-          FROM pending_user_invitations
-          WHERE LOWER(email) = $1
-          ORDER BY created_at ASC
-          LIMIT 1
-        `,
-        [email],
-      ),
-
-      db.query<AppRole>(
-        `
-          SELECT
-            id,
-            user_id AS "userId",
-            role,
-            created_at AS "createdAt",
-            updated_at AS "updatedAt"
-          FROM app_roles
-          WHERE user_id = $1
-          LIMIT 1
-        `,
-        [authUser.id],
-      ),
-    ])
-
-  const existingUser = existingUsers.rows[0]
-  const invitation = invitations.rows[0]
-  const existingRole = existingRoles.rows[0]
-
-  if (!existingUser) {
-    await db.query(
-      `
-        INSERT INTO users (
-          id,
-          email,
-          display_name,
-          created_at,
-          updated_at,
-          last_sign_in,
-          is_archived
-        )
-        VALUES ($1, $2, $3, $4, $4, $4, 0)
-      `,
-      [
-        authUser.id,
-        authUser.email,
-        invitation?.displayName ||
-          authUser.name ||
-          authUser.email.split('@')[0],
-        now,
-      ],
+    // Serialize provisioning attempts for this authenticated identity.
+    await client.query(
+      `SELECT pg_advisory_xact_lock(hashtext($1))`,
+      [authUser.id],
     )
-  }
 
-  if (invitation) {
-    if (existingRole) {
-      if (existingRole.role !== invitation.requestedRole) {
-        await db.query(
-          `
-            UPDATE app_roles
-            SET role = $1, updated_at = $2
-            WHERE id = $3
-          `,
-          [
-            invitation.requestedRole,
-            now,
-            existingRole.id,
-          ],
-        )
-      }
-    } else {
-      await db.query(
+    const userResult = await client.query<{
+      id: string
+      email: string
+      is_archived: number
+    }>(
+      `
+        SELECT id, email, is_archived
+        FROM users
+        WHERE id = $1
+        FOR UPDATE
+      `,
+      [authUser.id],
+    )
+
+    const existingUser = userResult.rows[0]
+
+    if (existingUser?.is_archived === 1) {
+      throw new Error('This account has been archived')
+    }
+
+    const roleResult = await client.query<{
+      role: AccessLevel
+    }>(
+      `
+        SELECT role
+        FROM app_roles
+        WHERE user_id = $1
+        FOR UPDATE
+      `,
+      [authUser.id],
+    )
+
+    const existingRole = roleResult.rows[0]?.role
+
+    const invitationResult = await client.query<{
+      id: string
+      display_name: string
+      requested_role: AccessLevel
+    }>(
+      `
+        SELECT id, display_name, requested_role
+        FROM pending_user_invitations
+        WHERE LOWER(email) = $1
+        ORDER BY created_at ASC
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [email],
+    )
+
+    const invitation = invitationResult.rows[0]
+
+    // Existing authorized accounts retain their assigned permissions.
+    if (existingUser && existingRole) {
+      await client.query(
+        `
+          UPDATE users
+          SET last_sign_in = $1,
+              updated_at = $1
+          WHERE id = $2
+        `,
+        [now, authUser.id],
+      )
+
+      await client.query('COMMIT')
+      return existingRole
+    }
+
+    // New accounts require an invitation and a verified email.
+    if (!invitation || !authUser.emailVerified) {
+      await client.query('COMMIT')
+      return null
+    }
+
+    if (!existingUser) {
+      await client.query(
+        `
+          INSERT INTO users (
+            id,
+            email,
+            email_verified,
+            display_name,
+            created_at,
+            updated_at,
+            last_sign_in,
+            is_archived
+          )
+          VALUES ($1, $2, 1, $3, $4, $4, $4, 0)
+        `,
+        [
+          authUser.id,
+          email,
+          invitation.display_name,
+          now,
+        ],
+      )
+    }
+
+    if (!existingRole) {
+      await client.query(
         `
           INSERT INTO app_roles (
             id,
@@ -153,13 +166,13 @@ export const reconcileCurrentUser = createServerFn({
         [
           crypto.randomUUID(),
           authUser.id,
-          invitation.requestedRole,
+          invitation.requested_role,
           now,
         ],
       )
     }
 
-    await db.query(
+    await client.query(
       `
         DELETE FROM pending_user_invitations
         WHERE id = $1
@@ -167,8 +180,13 @@ export const reconcileCurrentUser = createServerFn({
       [invitation.id],
     )
 
-    return invitation.requestedRole
-  }
+    await client.query('COMMIT')
 
-  return existingRole?.role || null
+    return existingRole ?? invitation.requested_role
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
 })
