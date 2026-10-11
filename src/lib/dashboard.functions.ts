@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { getSession } from '@/lib/auth'
 import { getDb } from '@/lib/db.server'
 import type { AccessLevel } from '@/lib/access-control'
+import { requireActiveUser } from '@/lib/authorization.server'
 
 export interface DashboardIncident {
   id: string
