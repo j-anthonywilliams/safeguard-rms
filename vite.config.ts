@@ -226,39 +226,46 @@ export default defineConfig({
     // to prevent duplicate React hooks and runtime errors.
     dedupe: ['react', 'react-dom'],
   },
+  // optimizeDeps: {
+  //   // Pre-bundle the CLIENT-ENTRY dependency closure at dev-server start. TanStack
+  //   // Start injects its hydration entry (@tanstack/react-start/dist/plugin/
+  //   // default-entry/client.tsx) into the page, and the browser loads it via a
+  //   // DYNAMIC import. If a dep in that closure is NOT already optimized, the first
+  //   // post-build page load DISCOVERS it and kicks off an on-demand dep re-optimize —
+  //   // and the entry's in-flight dynamic import can land mid-optimize and fail with
+  //   // "Failed to fetch dynamically imported module: …/default-entry/client.tsx", so
+  //   // a freshly-built site shows a BLANK preview (the dep chunk 504s while GET /
+  //   // still 200s → invisible to health probes). Listing the closure here optimizes
+  //   // it ONCE at boot. Dev-only — optimizeDeps does NOT touch the production /
+  //   // prerender build, so SSR + SEO are unchanged.
+  //   //
+  //   // DELIBERATELY OMITTED: `@tanstack/react-start/client`. The hydration entry
+  //   // imports it, but it transitively imports `node:async_hooks`, and on this
+  //   // raw-Vite setup (no Nitro/unenv layer) Vite externalizes that builtin to a
+  //   // THROWING browser stub. Force-optimizing react-start/client bakes the stub into
+  //   // the client bundle at boot, so the moment a client-only (`ssr: false`) route
+  //   // constructs Start's storage context it dies with "AsyncLocalStorage is not a
+  //   // constructor" — a DETERMINISTIC blank preview on every ssr:false route. Left
+  //   // off this list it loads lazily (as it did before the list was added) and
+  //   // ssr:false routes render again. Do NOT re-add it without a real browser
+  //   // polyfill for node:async_hooks — a client-side async_hooks shim removes the
+  //   // "is not a constructor" throw but still breaks Start's hydration, so it is not
+  //   // a viable workaround.
+  //   include: [
+  //     'react',
+  //     'react-dom',
+  //     'react-dom/client',
+  //     'react/jsx-runtime',
+  //     'framer-motion',
+  //     '@tanstack/react-router',
+  //     '@tanstack/react-query',
+  //   ],
+  // },
   optimizeDeps: {
-    // Pre-bundle the CLIENT-ENTRY dependency closure at dev-server start. TanStack
-    // Start injects its hydration entry (@tanstack/react-start/dist/plugin/
-    // default-entry/client.tsx) into the page, and the browser loads it via a
-    // DYNAMIC import. If a dep in that closure is NOT already optimized, the first
-    // post-build page load DISCOVERS it and kicks off an on-demand dep re-optimize —
-    // and the entry's in-flight dynamic import can land mid-optimize and fail with
-    // "Failed to fetch dynamically imported module: …/default-entry/client.tsx", so
-    // a freshly-built site shows a BLANK preview (the dep chunk 504s while GET /
-    // still 200s → invisible to health probes). Listing the closure here optimizes
-    // it ONCE at boot. Dev-only — optimizeDeps does NOT touch the production /
-    // prerender build, so SSR + SEO are unchanged.
-    //
-    // DELIBERATELY OMITTED: `@tanstack/react-start/client`. The hydration entry
-    // imports it, but it transitively imports `node:async_hooks`, and on this
-    // raw-Vite setup (no Nitro/unenv layer) Vite externalizes that builtin to a
-    // THROWING browser stub. Force-optimizing react-start/client bakes the stub into
-    // the client bundle at boot, so the moment a client-only (`ssr: false`) route
-    // constructs Start's storage context it dies with "AsyncLocalStorage is not a
-    // constructor" — a DETERMINISTIC blank preview on every ssr:false route. Left
-    // off this list it loads lazily (as it did before the list was added) and
-    // ssr:false routes render again. Do NOT re-add it without a real browser
-    // polyfill for node:async_hooks — a client-side async_hooks shim removes the
-    // "is not a constructor" throw but still breaks Start's hydration, so it is not
-    // a viable workaround.
-    include: [
-      'react',
-      'react-dom',
-      'react-dom/client',
-      'react/jsx-runtime',
-      'framer-motion',
-      '@tanstack/react-router',
-      '@tanstack/react-query',
+    exclude: [
+      '@tanstack/start-server-core',
+      '@tanstack/react-start-server',
+      '@tanstack/react-start',
     ],
   },
   server: {

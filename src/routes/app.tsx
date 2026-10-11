@@ -22,7 +22,7 @@ import { SharedAppLayout } from '@/layouts/shared-app-layout'
  * `src/routes/app.tsx` and the `src/routes/app/` folder. Deleting is always safe.
  *
  * Auth-gate the whole shell by wrapping <Outlet /> in your auth check here — one
- * place, not per page. Browser-only state (blink.auth, localStorage, window) must
+ * place, not per page. Browser-only state (browser authentication state, localStorage, window) must
  * sit inside <ClientBoundary> (wrap the whole shell if the entire app is
  * browser-only). Do NOT use the route's `ssr: false` — a client-only route in this
  * TanStack Start template hits Start's server-context `node:async_hooks` path (a

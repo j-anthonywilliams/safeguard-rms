@@ -38,7 +38,7 @@ const queryClient = new QueryClient()
  * override title/description via their own head().
  *
  * SSR: this document (and every route) is server-rendered/prerendered. A child
- * that reads browser-only state at render — `blink.auth`/`onAuthStateChanged`,
+ * that reads browser-only state at render — `browser authentication state`/`onAuthStateChanged`,
  * `localStorage`, `window` — must be wrapped in `<ClientBoundary>`
  * (`src/components/ClientBoundary.tsx`), which also covers a whole-page
  * client tree, or the page ships blank / hydration-mismatched. Do NOT use the

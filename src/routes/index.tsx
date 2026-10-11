@@ -22,7 +22,7 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
  * - Routes are files under `src/routes/` that `export const Route =
  *   createFileRoute('/path')({ component })`. NEVER `export default` a route.
  *   Navigate with `Link` from `@tanstack/react-router` (there is no `NavLink`).
- * - Reading Blink auth/SDK state (`blink.auth`), `localStorage`, or `window` at
+ * - Reading browser-dependent authentication state (`browser authentication state`), `localStorage`, or `window` at
  *   render CRASHES SSR / hydration-mismatches and ships a blank first page. Wrap
  *   that subtree in `<ClientBoundary fallback={…}>` (from
  *   `@/components/ClientBoundary`) — wrap the whole tree if the entire page
