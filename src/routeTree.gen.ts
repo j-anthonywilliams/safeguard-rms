@@ -15,6 +15,7 @@ import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppUsersRouteImport } from './routes/app/users'
 import { Route as AppSchedulerRouteImport } from './routes/app/scheduler'
 import { Route as AppProfileRouteImport } from './routes/app/profile'
+import { Route as AppOrganizationRouteImport } from './routes/app/organization'
 import { Route as ApiTestRouteImport } from './routes/api/test'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
@@ -48,6 +49,11 @@ const AppProfileRoute = AppProfileRouteImport.update({
   path: '/profile',
   getParentRoute: () => AppRoute,
 } as any)
+const AppOrganizationRoute = AppOrganizationRouteImport.update({
+  id: '/organization',
+  path: '/organization',
+  getParentRoute: () => AppRoute,
+} as any)
 const ApiTestRoute = ApiTestRouteImport.update({
   id: '/api/test',
   path: '/api/test',
@@ -63,6 +69,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/api/test': typeof ApiTestRoute
+  '/app/organization': typeof AppOrganizationRoute
   '/app/profile': typeof AppProfileRoute
   '/app/scheduler': typeof AppSchedulerRoute
   '/app/users': typeof AppUsersRoute
@@ -72,6 +79,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/test': typeof ApiTestRoute
+  '/app/organization': typeof AppOrganizationRoute
   '/app/profile': typeof AppProfileRoute
   '/app/scheduler': typeof AppSchedulerRoute
   '/app/users': typeof AppUsersRoute
@@ -83,6 +91,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/api/test': typeof ApiTestRoute
+  '/app/organization': typeof AppOrganizationRoute
   '/app/profile': typeof AppProfileRoute
   '/app/scheduler': typeof AppSchedulerRoute
   '/app/users': typeof AppUsersRoute
@@ -95,6 +104,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/api/test'
+    | '/app/organization'
     | '/app/profile'
     | '/app/scheduler'
     | '/app/users'
@@ -104,6 +114,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/api/test'
+    | '/app/organization'
     | '/app/profile'
     | '/app/scheduler'
     | '/app/users'
@@ -114,6 +125,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/api/test'
+    | '/app/organization'
     | '/app/profile'
     | '/app/scheduler'
     | '/app/users'
@@ -172,6 +184,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProfileRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/organization': {
+      id: '/app/organization'
+      path: '/organization'
+      fullPath: '/app/organization'
+      preLoaderRoute: typeof AppOrganizationRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/api/test': {
       id: '/api/test'
       path: '/api/test'
@@ -190,6 +209,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppOrganizationRoute: typeof AppOrganizationRoute
   AppProfileRoute: typeof AppProfileRoute
   AppSchedulerRoute: typeof AppSchedulerRoute
   AppUsersRoute: typeof AppUsersRoute
@@ -197,6 +217,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppOrganizationRoute: AppOrganizationRoute,
   AppProfileRoute: AppProfileRoute,
   AppSchedulerRoute: AppSchedulerRoute,
   AppUsersRoute: AppUsersRoute,

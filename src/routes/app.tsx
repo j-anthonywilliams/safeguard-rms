@@ -29,6 +29,7 @@ import { SharedAppLayout } from '@/layouts/shared-app-layout'
  * throwing browser stub) and ships a BLANK preview ("AsyncLocalStorage is not a
  * constructor").
  */
+
 export const Route = createFileRoute('/app')({
   component: AppLayout,
 })

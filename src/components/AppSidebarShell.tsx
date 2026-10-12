@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/tooltip'
 import {
   Archive,
+  Building2,
   CalendarDays,
   ClipboardPlus,
   LayoutDashboard,
@@ -80,6 +81,12 @@ const NAV_ITEMS: NavItemDef[] = [
     href: '/app/users',
     icon: <Users className="h-4 w-4" />,
     label: 'User management',
+    requiresManagement: true,
+  },
+  {
+    href: '/app/organization',
+    icon: <Building2 className="h-4 w-4" />,
+    label: 'Organization management',
     requiresManagement: true,
   },
 ]
