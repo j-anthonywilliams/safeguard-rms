@@ -2,7 +2,10 @@ import { createServerFn } from '@tanstack/react-start'
 import { getSession } from '@/lib/auth'
 import { getDb } from '@/lib/db.server'
 import type { AccessLevel } from '@/lib/access-control'
-import { requireActiveUser } from '@/lib/authorization.server'
+import {
+  requireActiveUser,
+  requireRole,
+} from '@/lib/authorization.server'
 
 export interface DashboardIncident {
   id: string
@@ -387,29 +390,19 @@ export const createAttendanceLog = createServerFn({
     }) => data,
   )
   .handler(async ({ data }) => {
+    const authorizedUser = await requireRole([
+      'supervisor',
+      'admin',
+      'backend',
+    ])
+
     const session = await getSession()
 
-    if (!session?.user) {
-      throw new Error('Not authenticated')
+    if (!session?.user || session.user.id !== authorizedUser.id) {
+      throw new Error('Authentication required')
     }
 
     const db = getDb()
-
-    const roleResult = await db.query<{ role: AccessLevel }>(
-      `
-        SELECT role
-        FROM app_roles
-        WHERE user_id = $1
-        LIMIT 1
-      `,
-      [session.user.id],
-    )
-
-    const accessLevel = roleResult.rows[0]?.role ?? 'user'
-
-    if (!['supervisor', 'admin', 'backend'].includes(accessLevel)) {
-      throw new Error('Insufficient permissions')
-    }
 
     const approvedAt = new Date().toISOString()
     const approvedBy =
@@ -478,10 +471,16 @@ export const reviewIncident = createServerFn({
     }) => data,
   )
   .handler(async ({ data }) => {
+    const authorizedUser = await requireRole([
+      'supervisor',
+      'admin',
+      'backend',
+    ])
+
     const session = await getSession()
 
-    if (!session?.user) {
-      throw new Error('Not authenticated')
+    if (!session?.user || session.user.id !== authorizedUser.id) {
+      throw new Error('Authentication required')
     }
 
     if (
@@ -492,22 +491,6 @@ export const reviewIncident = createServerFn({
     }
 
     const db = getDb()
-
-    const roleResult = await db.query<{ role: AccessLevel }>(
-      `
-        SELECT role
-        FROM app_roles
-        WHERE user_id = $1
-        LIMIT 1
-      `,
-      [session.user.id],
-    )
-
-    const accessLevel = roleResult.rows[0]?.role ?? 'user'
-
-    if (!['supervisor', 'admin', 'backend'].includes(accessLevel)) {
-      throw new Error('Insufficient permissions')
-    }
 
     const reviewedAt = new Date().toISOString()
     const reviewer =
@@ -581,11 +564,7 @@ export const reviewIncident = createServerFn({
 export const getPanelEvidence = createServerFn({
   method: 'GET',
 }).handler(async () => {
-  const session = await getSession()
-
-  if (!session?.user) {
-    throw new Error('Not authenticated')
-  }
+  const authorizedUser = await requireActiveUser()
 
   const db = getDb()
 
@@ -605,7 +584,7 @@ export const getPanelEvidence = createServerFn({
       ORDER BY created_at DESC
       LIMIT 100
     `,
-    [session.user.id],
+    [authorizedUser.id],
   )
 
   return result.rows
@@ -621,11 +600,12 @@ export const createCaseFile = createServerFn({
     }) => data,
   )
   .handler(async ({ data }) => {
-    const session = await getSession()
-
-    if (!session?.user) {
-      throw new Error('Not authenticated')
-    }
+    const authorizedUser = await requireRole([
+      'user',
+      'supervisor',
+      'admin',
+      'backend',
+    ])
 
     const db = getDb()
     const now = new Date().toISOString()
@@ -655,11 +635,11 @@ export const createCaseFile = createServerFn({
       `,
       [
         crypto.randomUUID(),
-        session.user.id,
+        authorizedUser.id,
         data.caseNumber.trim(),
         data.title.trim(),
         'Open',
-        session.user.id,
+        authorizedUser.id,
         now,
         now,
       ],
@@ -679,11 +659,12 @@ export const createEquipment = createServerFn({
     }) => data,
   )
   .handler(async ({ data }) => {
-    const session = await getSession()
-
-    if (!session?.user) {
-      throw new Error('Not authenticated')
-    }
+    const authorizedUser = await requireRole([
+      'user',
+      'supervisor',
+      'admin',
+      'backend',
+    ])
 
     const db = getDb()
     const now = new Date().toISOString()
@@ -711,11 +692,11 @@ export const createEquipment = createServerFn({
       `,
       [
         crypto.randomUUID(),
-        session.user.id,
+        authorizedUser.id,
         data.name.trim(),
         data.serialNumber.trim(),
         'Available',
-        data.assignedTo || session.user.id,
+        data.assignedTo || authorizedUser.id,
         now,
       ],
     )
@@ -734,10 +715,17 @@ export const createEvidence = createServerFn({
     }) => data,
   )
   .handler(async ({ data }) => {
+    const authorizedUser = await requireRole([
+      'user',
+      'supervisor',
+      'admin',
+      'backend',
+    ])
+
     const session = await getSession()
 
-    if (!session?.user) {
-      throw new Error('Not authenticated')
+    if (!session?.user || session.user.id !== authorizedUser.id) {
+      throw new Error('Authentication required')
     }
 
     const db = getDb()
@@ -767,7 +755,7 @@ export const createEvidence = createServerFn({
       `,
       [
         crypto.randomUUID(),
-        session.user.id,
+        authorizedUser.id,
         data.itemNumber.trim(),
         data.description.trim(),
         data.location.trim(),
@@ -793,7 +781,7 @@ export const createEvidence = createServerFn({
       `,
       [
         crypto.randomUUID(),
-        session.user.id,
+        authorizedUser.id,
         evidence.id,
         'Item received',
         session.user.name || session.user.email || 'Current officer',
@@ -815,11 +803,12 @@ export const updateEvidenceIncident = createServerFn({
     }) => data,
   )
   .handler(async ({ data }) => {
-    const session = await getSession()
-
-    if (!session?.user) {
-      throw new Error('Not authenticated')
-    }
+    const authorizedUser = await requireRole([
+      'user',
+      'supervisor',
+      'admin',
+      'backend',
+    ])
 
     const db = getDb()
 
@@ -842,7 +831,7 @@ export const updateEvidenceIncident = createServerFn({
       [
         data.incidentId,
         data.evidenceId,
-        session.user.id,
+        authorizedUser.id,
       ],
     )
 
