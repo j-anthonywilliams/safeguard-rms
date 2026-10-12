@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { getSession } from '@/lib/auth'
 import { getDb } from '@/lib/db.server'
 import type { AccessLevel } from '@/lib/access-control'
+import { getCustomerContext } from '@/lib/customer-context.server'
 
 export interface SchedulerUser {
   id: string
@@ -148,6 +149,7 @@ export const getSchedulerData = createServerFn({
   }
 })
 
+
 export const saveScheduleEntry = createServerFn({
   method: 'POST',
 })
@@ -167,6 +169,7 @@ export const saveScheduleEntry = createServerFn({
 
     await requireScheduleEditor(session.user.id)
 
+    const customer = await getCustomerContext()
     const db = getDb()
     const now = new Date().toISOString()
 
@@ -183,6 +186,7 @@ export const saveScheduleEntry = createServerFn({
             notes = $6,
             updated_at = $7
           WHERE id = $8
+            AND customer_id = $9
           RETURNING
             id,
             user_id AS "userId",
@@ -203,11 +207,14 @@ export const saveScheduleEntry = createServerFn({
           data.notes,
           now,
           data.id,
+          customer.id,
         ],
       )
 
       if (!result.rows[0]) {
-        throw new Error('Schedule entry not found')
+        throw new Error(
+          'Schedule entry not found for this customer',
+        )
       }
 
       return result.rows[0]
@@ -218,6 +225,7 @@ export const saveScheduleEntry = createServerFn({
         INSERT INTO schedule_entries (
           id,
           user_id,
+          customer_id,
           shift_date,
           start_time,
           end_time,
@@ -227,7 +235,8 @@ export const saveScheduleEntry = createServerFn({
           updated_at
         )
         VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9, $10
         )
         RETURNING
           id,
@@ -243,6 +252,7 @@ export const saveScheduleEntry = createServerFn({
       [
         crypto.randomUUID(),
         data.userId || session.user.id,
+        customer.id,
         data.shiftDate,
         data.startTime,
         data.endTime,
@@ -253,8 +263,14 @@ export const saveScheduleEntry = createServerFn({
       ],
     )
 
+    if (!result.rows[0]) {
+      throw new Error('Schedule entry could not be created')
+    }
+
     return result.rows[0]
   })
+
+
 
 export const createPtoRequest = createServerFn({
   method: 'POST',
@@ -269,14 +285,31 @@ export const createPtoRequest = createServerFn({
   )
   .handler(async ({ data }) => {
     const session = await requireSession()
+    const customer = await getCustomerContext()
+
     const db = getDb()
     const now = new Date().toISOString()
+
+    const ptoType = data.ptoType.trim()
+
+    if (!ptoType || !data.startDate || !data.endDate) {
+      throw new Error(
+        'PTO type, start date, and end date are required',
+      )
+    }
+
+    if (data.endDate < data.startDate) {
+      throw new Error(
+        'PTO end date cannot be before the start date',
+      )
+    }
 
     const result = await db.query<SchedulerPtoRequest>(
       `
         INSERT INTO pto_requests (
           id,
           user_id,
+          customer_id,
           pto_type,
           start_date,
           end_date,
@@ -289,8 +322,8 @@ export const createPtoRequest = createServerFn({
           updated_at
         )
         VALUES (
-          $1, $2, $3, $4, $5, $6,
-          $7, $8, $9, $10, $11, $12
+          $1, $2, $3, $4, $5, $6, $7,
+          $8, $9, $10, $11, $12, $13
         )
         RETURNING
           id,
@@ -309,7 +342,8 @@ export const createPtoRequest = createServerFn({
       [
         crypto.randomUUID(),
         session.user.id,
-        data.ptoType,
+        customer.id,
+        ptoType,
         data.startDate,
         data.endDate,
         data.notes,
@@ -321,6 +355,10 @@ export const createPtoRequest = createServerFn({
         now,
       ],
     )
+
+    if (!result.rows[0]) {
+      throw new Error('PTO request could not be created')
+    }
 
     return result.rows[0]
   })

@@ -6,6 +6,7 @@ import {
   requireActiveUser,
   requireRole,
 } from '@/lib/authorization.server'
+import { getCustomerContext } from '@/lib/customer-context.server'
 
 export interface DashboardIncident {
   id: string
@@ -325,6 +326,7 @@ export const getDashboardData = createServerFn({
   }
 })
 
+
 export const createAttendanceLog = createServerFn({
   method: 'POST',
 })
@@ -337,27 +339,32 @@ export const createAttendanceLog = createServerFn({
     }) => data,
   )
   .handler(async ({ data }) => {
-    const session = await getSession()
-
-    if (!session?.user) {
-      throw new Error('Not authenticated')
-    }
+    const authorizedUser = await requireActiveUser()
+    const customer = await getCustomerContext()
 
     const db = getDb()
     const now = new Date().toISOString()
+
+    if (
+      data.eventType !== 'clock_in' &&
+      data.eventType !== 'clock_out'
+    ) {
+      throw new Error('Invalid attendance event type')
+    }
 
     const result = await db.query<DashboardAttendanceLog>(
       `
         INSERT INTO attendance_logs (
           id,
           user_id,
+          customer_id,
           event_type,
           event_at,
           latitude,
           longitude,
           accuracy
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING
           id,
           user_id AS "userId",
@@ -369,7 +376,8 @@ export const createAttendanceLog = createServerFn({
       `,
       [
         crypto.randomUUID(),
-        session.user.id,
+        authorizedUser.id,
+        customer.id,
         data.eventType,
         now,
         data.latitude,
@@ -378,8 +386,13 @@ export const createAttendanceLog = createServerFn({
       ],
     )
 
+    if (!result.rows[0]) {
+      throw new Error('Attendance record could not be created')
+    }
+
     return result.rows[0]
   })
+
 
   export const approveIncident = createServerFn({
   method: 'POST',
@@ -590,6 +603,7 @@ export const getPanelEvidence = createServerFn({
   return result.rows
 })
 
+
 export const createCaseFile = createServerFn({
   method: 'POST',
 })
@@ -607,14 +621,23 @@ export const createCaseFile = createServerFn({
       'backend',
     ])
 
+    const customer = await getCustomerContext()
     const db = getDb()
     const now = new Date().toISOString()
+
+    const caseNumber = data.caseNumber.trim()
+    const title = data.title.trim()
+
+    if (!caseNumber || !title) {
+      throw new Error('Case number and title are required')
+    }
 
     const result = await db.query<DashboardCaseFile>(
       `
         INSERT INTO case_files (
           id,
           user_id,
+          customer_id,
           case_number,
           title,
           status,
@@ -622,7 +645,9 @@ export const createCaseFile = createServerFn({
           created_at,
           updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9
+        )
         RETURNING
           id,
           user_id AS "userId",
@@ -636,8 +661,9 @@ export const createCaseFile = createServerFn({
       [
         crypto.randomUUID(),
         authorizedUser.id,
-        data.caseNumber.trim(),
-        data.title.trim(),
+        customer.id,
+        caseNumber,
+        title,
         'Open',
         authorizedUser.id,
         now,
@@ -645,8 +671,13 @@ export const createCaseFile = createServerFn({
       ],
     )
 
-    return result.rows[0]
-  })
+    if (!result.rows[0]) {
+      throw new Error('Case file could not be created')
+    }
+
+        return result.rows[0]
+      })
+
 
 export const createEquipment = createServerFn({
   method: 'POST',
@@ -666,21 +697,34 @@ export const createEquipment = createServerFn({
       'backend',
     ])
 
+    const customer = await getCustomerContext()
     const db = getDb()
     const now = new Date().toISOString()
+
+    const name = data.name.trim()
+    const serialNumber = data.serialNumber.trim()
+
+    if (!name || !serialNumber) {
+      throw new Error(
+        'Equipment name and serial number are required',
+      )
+    }
 
     const result = await db.query<DashboardEquipment>(
       `
         INSERT INTO equipment (
           id,
           user_id,
+          customer_id,
           name,
           serial_number,
           status,
           assigned_to,
           updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8
+        )
         RETURNING
           id,
           user_id AS "userId",
@@ -693,16 +737,22 @@ export const createEquipment = createServerFn({
       [
         crypto.randomUUID(),
         authorizedUser.id,
-        data.name.trim(),
-        data.serialNumber.trim(),
+        customer.id,
+        name,
+        serialNumber,
         'Available',
         data.assignedTo || authorizedUser.id,
         now,
       ],
     )
 
+    if (!result.rows[0]) {
+      throw new Error('Equipment could not be created')
+    }
+
     return result.rows[0]
   })
+
 
 export const createEvidence = createServerFn({
   method: 'POST',
@@ -728,70 +778,103 @@ export const createEvidence = createServerFn({
       throw new Error('Authentication required')
     }
 
+    const customer = await getCustomerContext()
     const db = getDb()
     const now = new Date().toISOString()
 
-    const evidenceResult = await db.query<DashboardEvidence>(
-      `
-        INSERT INTO evidence (
-          id,
-          user_id,
-          item_number,
+    const itemNumber = data.itemNumber.trim()
+    const description = data.description.trim()
+    const location = data.location.trim()
+
+    if (!itemNumber || !description || !location) {
+      throw new Error(
+        'Item number, description, and location are required',
+      )
+    }
+
+    const client = await db.connect()
+
+    try {
+      await client.query('BEGIN')
+
+      const evidenceResult = await client.query<DashboardEvidence>(
+        `
+          INSERT INTO evidence (
+            id,
+            user_id,
+            customer_id,
+            item_number,
+            description,
+            location,
+            status,
+            created_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          RETURNING
+            id,
+            user_id AS "userId",
+            item_number AS "itemNumber",
+            description,
+            location,
+            status,
+            incident_id AS "incidentId",
+            created_at AS "createdAt"
+        `,
+        [
+          crypto.randomUUID(),
+          authorizedUser.id,
+          customer.id,
+          itemNumber,
           description,
           location,
-          status,
-          created_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING
-          id,
-          user_id AS "userId",
-          item_number AS "itemNumber",
-          description,
-          location,
-          status,
-          incident_id AS "incidentId",
-          created_at AS "createdAt"
-      `,
-      [
-        crypto.randomUUID(),
-        authorizedUser.id,
-        data.itemNumber.trim(),
-        data.description.trim(),
-        data.location.trim(),
-        'In custody',
-        now,
-      ],
-    )
+          'In custody',
+          now,
+        ],
+      )
 
-    const evidence = evidenceResult.rows[0]
+      const evidence = evidenceResult.rows[0]
 
-    await db.query(
-      `
-        INSERT INTO custody_events (
-          id,
-          user_id,
-          evidence_id,
-          action,
-          actor,
-          note,
-          event_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `,
-      [
-        crypto.randomUUID(),
-        authorizedUser.id,
-        evidence.id,
-        'Item received',
-        session.user.name || session.user.email || 'Current officer',
-        'Initial intake',
-        now,
-      ],
-    )
+      if (!evidence) {
+        throw new Error('Evidence record could not be created')
+      }
 
-    return evidence
+      await client.query(
+        `
+          INSERT INTO custody_events (
+            id,
+            user_id,
+            evidence_id,
+            action,
+            actor,
+            note,
+            event_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `,
+        [
+          crypto.randomUUID(),
+          authorizedUser.id,
+          evidence.id,
+          'Item received',
+          session.user.name ||
+            session.user.email ||
+            'Current officer',
+          'Initial intake',
+          now,
+        ],
+      )
+
+      await client.query('COMMIT')
+
+      return evidence
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
+    }
   })
+
 
 export const updateEvidenceIncident = createServerFn({
   method: 'POST',
@@ -879,6 +962,7 @@ export const saveIncident = createServerFn({
     }
 
     const db = getDb()
+    const customer = await getCustomerContext()
     const now = new Date().toISOString()
 
     if (data.id) {
@@ -974,6 +1058,7 @@ export const saveIncident = createServerFn({
         INSERT INTO incidents (
           id,
           user_id,
+          customer_id,
           report_number,
           incident_date,
           location,
@@ -1000,7 +1085,7 @@ export const saveIncident = createServerFn({
         VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8,
           $9, $10, $11, $12, $13, $14, $15, $16,
-          $17, $18, $19, $20, $21, $22, $23, $24
+          $17, $18, $19, $20, $21, $22, $23, $24, $25
         )
         RETURNING
           id,
@@ -1033,6 +1118,7 @@ export const saveIncident = createServerFn({
       [
         crypto.randomUUID(),
         session.user.id,
+        customer.id,
         data.reportNumber,
         data.incidentDate || now.slice(0, 10),
         data.location,

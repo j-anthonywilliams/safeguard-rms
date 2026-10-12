@@ -854,3 +854,81 @@ export const removeOrganizationUserAssignment = createServerFn({
 
     return { success: true }
   })
+
+
+export interface OrganizationUserAssignment {
+  id: string
+  userId: string
+  userName: string | null
+  userEmail: string
+  assignmentType: OrganizationAssignmentType
+  organizationId: string
+  organizationName: string
+  createdAt: string
+}
+
+export const getOrganizationUserAssignments = createServerFn({
+  method: 'GET',
+}).handler(async () => {
+  const user = await requireActiveUser()
+
+  // Temporary restriction until platform and
+  // customer-level administration are separated.
+  if (user.role !== 'backend') {
+    throw new Error('Backend authorization required')
+  }
+
+  const db = getDb()
+
+  const result = await db.query<OrganizationUserAssignment>(
+    `
+      SELECT
+        a.id,
+        a.user_id AS "userId",
+        u.display_name AS "userName",
+        u.email AS "userEmail",
+        'customer' AS "assignmentType",
+        c.id AS "organizationId",
+        c.name AS "organizationName",
+        a.created_at::text AS "createdAt"
+      FROM user_customer_assignments a
+      JOIN users u ON u.id = a.user_id
+      JOIN customer_settings c ON c.id = a.customer_id
+
+      UNION ALL
+
+      SELECT
+        a.id,
+        a.user_id AS "userId",
+        u.display_name AS "userName",
+        u.email AS "userEmail",
+        'client' AS "assignmentType",
+        c.id AS "organizationId",
+        c.name AS "organizationName",
+        a.created_at::text AS "createdAt"
+      FROM user_client_assignments a
+      JOIN users u ON u.id = a.user_id
+      JOIN clients c ON c.id = a.client_id
+
+      UNION ALL
+
+      SELECT
+        a.id,
+        a.user_id AS "userId",
+        u.display_name AS "userName",
+        u.email AS "userEmail",
+        'site' AS "assignmentType",
+        s.id AS "organizationId",
+        s.name AS "organizationName",
+        a.created_at::text AS "createdAt"
+      FROM user_site_assignments a
+      JOIN users u ON u.id = a.user_id
+      JOIN sites s ON s.id = a.site_id
+
+      ORDER BY "userName", "assignmentType", "organizationName"
+    `,
+  )
+
+  return result.rows
+})
+

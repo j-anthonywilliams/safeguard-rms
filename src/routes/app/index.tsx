@@ -70,14 +70,78 @@ interface CodeDisposition { code: string; disposition: string }
 const canApproveIncidents = (level: AccessLevel) => ['supervisor', 'admin', 'backend'].includes(level)
 const approvalBadgeClass: Record<Incident['approvalStatus'], string> = { Pending: 'bg-accent text-accent-foreground', Approved: 'bg-chart-3/20 text-foreground', Rejected: 'bg-destructive/15 text-destructive' }
 const getApprovalStatus = (status?: Incident['approvalStatus']) => status || 'Pending'
-const parseCodeDispositions = (incident: Pick<Incident, 'incidentCodes' | 'disposition'>): CodeDisposition[] => {
-  try {
-    const parsed = JSON.parse(incident.incidentCodes)
-    if (Array.isArray(parsed) && parsed.every(item => item && typeof item.code === 'string')) return parsed.map((item, index) => ({ code: item.code, disposition: item.disposition || incident.disposition || `Disposition ${index + 1}` }))
-  } catch { /* legacy plain-text values are handled below */ }
-  const codes = incident.incidentCodes.split(',').map(value => value.trim()).filter(Boolean)
-  const dispositions = incident.disposition.split(',').map(value => value.trim()).filter(Boolean)
-  return codes.map((code, index) => ({ code, disposition: dispositions[index] || dispositions[0] || 'Not specified' }))
+
+const DISPOSITIONS = [
+  'Open',
+  'Cleared by Arrest',
+  'Cleared by Citation',
+  'Non-Criminal',
+  'Cleared by Exception',
+] as const
+
+const parseCodeDispositions = (
+  incident: Pick<Incident, 'incidentCodes' | 'disposition'>
+): CodeDisposition[] => {
+  const parseValue = (value: string): unknown => {
+    try {
+      return JSON.parse(value)
+    } catch {
+      return value
+    }
+  }
+
+  const rawCodes = parseValue(incident.incidentCodes || '')
+  const rawDispositions = parseValue(incident.disposition || '')
+
+  // Current format: disposition contains complete code/disposition pairs.
+  if (
+    Array.isArray(rawDispositions) &&
+    rawDispositions.every(
+      item =>
+        item !== null &&
+        typeof item === 'object' &&
+        typeof item.code === 'string' &&
+        typeof item.disposition === 'string'
+    )
+  ) {
+    return rawDispositions.map(item => ({
+      code: item.code,
+      disposition: item.disposition,
+    }))
+  }
+
+  // Legacy format: incidentCodes contains complete pairs.
+  if (
+    Array.isArray(rawCodes) &&
+    rawCodes.every(
+      item =>
+        item !== null &&
+        typeof item === 'object' &&
+        typeof item.code === 'string'
+    )
+  ) {
+    return rawCodes.map(item => ({
+      code: item.code,
+      disposition: item.disposition || '',
+    }))
+  }
+
+  const codes = Array.isArray(rawCodes)
+    ? rawCodes.filter(
+        (item): item is string => typeof item === 'string'
+      )
+    : String(rawCodes).split(',').map(value => value.trim()).filter(Boolean)
+
+  const dispositions = Array.isArray(rawDispositions)
+    ? rawDispositions.filter(
+        (item): item is string => typeof item === 'string'
+      )
+    : String(rawDispositions).split(',').map(value => value.trim())
+
+  return codes.map((code, index) => ({
+    code,
+    disposition: dispositions[index] || dispositions[0] || '',
+  }))
 }
 
 export const Route = createFileRoute('/app/')({
@@ -949,7 +1013,65 @@ function Panel({
   const addPair = () => setCodeDispositions(current => [...current, { code: '', disposition: '' }])
   const removePair = (index: number) => setCodeDispositions(current => current.length === 1 ? current : current.filter((_, pairIndex) => pairIndex !== index))
   const update = (key: string) => (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm(prev => ({ ...prev, [key]: e.target.value }))
-  const field = (label: string, key: string, placeholder = '', type = 'text') => <label className="space-y-1.5"><span className="text-xs font-medium">{label}</span><Input type={type} placeholder={placeholder} value={form[key] || ''} onChange={update(key)} /></label>
+  
+const requiredFieldKeys: Record<
+  'incident' | 'equipment' | 'evidence' | 'case',
+  string[]
+> = {
+  incident: [
+    'location',
+    'city',
+    'state',
+    'zipCode',
+    'subjectName',
+    'narrative',
+  ],
+  equipment: [
+    'name',
+    'serialNumber',
+  ],
+  evidence: [
+    'itemNumber',
+    'description',
+    'location',
+  ],
+  case: [],
+}
+
+const field = (
+  label: string,
+  key: string,
+  placeholder = '',
+  inputType = 'text',
+) => {
+  const required = requiredFieldKeys[panelType].includes(key)
+
+  return (
+    <label className="block space-y-1.5">
+      <span className="text-xs font-medium">
+        {label}
+        {required && (
+          <span
+            className="ml-1 text-red-500"
+            aria-hidden="true"
+          >
+            *
+          </span>
+        )}
+      </span>
+
+      <Input
+        type={inputType}
+        placeholder={placeholder}
+        value={form[key] || ''}
+        onChange={update(key)}
+        required={required}
+        aria-required={required}
+      />
+    </label>
+  )
+}
+
   const equipmentAssignment = type === 'equipment' ? <label className="space-y-1.5 sm:col-span-2"><span className="text-xs font-medium">Assign to user</span><select className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring" value={form.assignedTo || userId} onChange={update('assignedTo')}><option value={userId}>Myself</option>{directoryUsers.filter(item => item.id !== userId).map(item => <option key={item.id} value={item.id}>{item.displayName || item.email}</option>)}</select></label> : null
     const save = async () => {
       if (!canCreateRecords(accessLevel)) {
@@ -1184,10 +1306,408 @@ function Panel({
         setSaving(false)
       }
     }
+
   const renderType = type as
     | 'incident'
     | 'equipment'
     | 'evidence'
     | 'case'
-  return <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/30 p-0 backdrop-blur-sm sm:items-center sm:p-5"><div className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-t-2xl border border-border bg-card p-5 shadow-lg sm:rounded-2xl sm:p-7"><div className="mb-6 flex items-start justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary">Secure data entry · {ACCESS_LABELS[accessLevel]}</p><h2 className="mt-1 font-serif text-2xl">{renderType === 'case' ? 'New case file' : type === 'incident' ? (initialIncident ? 'Edit incident report' : 'New incident report') : type === 'equipment' ? 'Add equipment asset' : 'Log property / evidence'}</h2><p className="mt-2 text-sm text-muted-foreground">{renderType === 'case' ? 'Create a case file to organize related incident reports.' : type === 'incident' ? 'Capture the facts, flags, codes, disposition, and narrative in one review-ready record.' : 'Required fields are marked by the save validation.'}</p></div><Button variant="ghost" size="icon" onClick={onClose} aria-label="Close"><X className="size-4" /></Button></div><div className="grid gap-4 sm:grid-cols-2">{renderType === 'case' ? <><div className="sm:col-span-2">{field('Case number', 'caseNumber', 'CASE-2026-0001')}</div><div className="sm:col-span-2">{field('Case title', 'caseTitle', 'Burglary investigation')}</div></> : type === 'incident' ? <><div className="sm:col-span-2 grid gap-4 sm:grid-cols-2">{field('Report number', 'reportNumber', 'Auto-generated if blank')}{field('Incident date', 'incidentDate', '', 'date')}</div>{field('Location', 'location', '123 Main St / sector 4')}{field('City', 'city', 'Springfield')}{field('State', 'state', 'CA')}{field('ZIP code', 'zipCode', '90210')}{field('Subject name', 'subjectName', 'Full legal name')}{field('Contact phone', 'subjectPhone', '(555) 000-0000', 'tel')}{field('Date of birth', 'subjectDob', 'MM / DD / YYYY')}<div className="grid gap-3 rounded-lg border border-border bg-muted/20 p-3 sm:col-span-2 sm:grid-cols-2"><p className="text-xs font-medium sm:col-span-2">Report flags</p><label className="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={form.violentFlag === '1'} onChange={event => setForm(prev => ({ ...prev, violentFlag: event.target.checked ? '1' : '' }))} className="size-4 accent-primary" />Violent subject / incident</label><label className="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={form.banBarFlag === '1'} onChange={event => setForm(prev => ({ ...prev, banBarFlag: event.target.checked ? '1' : '' }))} className="size-4 accent-primary" />Ban / bar flag</label></div><div className="space-y-3 sm:col-span-2"><div className="flex items-center justify-between"><div><p className="text-xs font-medium">Incident codes and dispositions</p><p className="text-xs text-muted-foreground">Pair every code with the action or outcome it received.</p></div><Button type="button" variant="outline" size="sm" onClick={addPair}><Plus className="size-3.5" />Add pair</Button></div>{codeDispositions.map((pair, index) => <div key={`pair-${index}`} className="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 sm:grid-cols-[1fr_1.4fr_auto]"><Input value={pair.code} onChange={event => updatePair(index, 'code', event.target.value)} placeholder="Code e.g. 240" aria-label={`Incident code ${index + 1}`} /><Input value={pair.disposition} onChange={event => updatePair(index, 'disposition', event.target.value)} placeholder="Corresponding disposition" aria-label={`Disposition for code ${index + 1}`} /><Button type="button" variant="ghost" size="icon" onClick={() => removePair(index)} disabled={codeDispositions.length === 1} aria-label={`Remove code ${index + 1}`}><X className="size-4" /></Button></div>)}</div><div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3 sm:col-span-2"><div><p className="text-xs font-medium">Associated property / evidence</p><p className="text-xs text-muted-foreground">Select one or more items tied to this report.</p></div>{availableEvidence.length ? <div className="grid gap-2 sm:grid-cols-2">{availableEvidence.map(item => <label key={item.id} className="flex cursor-pointer items-start gap-3 rounded-md border border-border bg-card p-3 text-sm transition-colors hover:bg-muted/40"><input type="checkbox" checked={selectedEvidenceIds.includes(item.id)} onChange={() => toggleEvidence(item.id)} className="mt-0.5 size-4 accent-primary" /><span className="min-w-0"><span className="block font-medium">{item.itemNumber}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{item.description} · {item.location}</span></span></label>)}</div> : <p className="text-xs text-muted-foreground">No property items yet. Log property first, then associate it here.</p>}</div><label className="space-y-1.5 sm:col-span-2"><span className="text-xs font-medium">Narrative</span><textarea className="min-h-36 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none ring-ring focus-visible:ring-[3px]" placeholder="Document the facts, sequence, witnesses, and actions taken…" value={form.narrative || ''} onChange={update('narrative')} /></label></> : type === 'equipment' ? <>{field('Equipment name', 'name', 'Body camera / radio / kit')}{field('Serial number', 'serialNumber', 'Asset identifier')}{equipmentAssignment}</> : <>{field('Item number', 'itemNumber', 'EV-2026-0001')}{field('Description', 'description', 'Describe the item and packaging')}{field('Found / stored location', 'location', 'Evidence locker / room')}</>}</div><div className="mt-7 flex justify-end gap-2 border-t border-border pt-5"><Button variant="ghost" onClick={onClose}>Cancel</Button><Button onClick={save} disabled={saving}>{saving ? 'Saving…' : initialIncident && type === 'incident' ? 'Update report' : 'Save securely'} <ArrowUpRight className="size-4" /></Button></div></div></div>
-  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/30 p-0 backdrop-blur-sm sm:items-center sm:p-5">
+      <div className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-t-2xl border border-border bg-card p-5 shadow-lg sm:rounded-2xl sm:p-7">
+
+        {/* Header */}
+        <div className="mb-6 flex items-start justify-between">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary">
+              Secure data entry · {ACCESS_LABELS[accessLevel]}
+            </p>
+
+            <h2 className="mt-1 font-serif text-2xl">
+              {renderType === 'case'
+                ? 'New case file'
+                : renderType === 'incident'
+                  ? initialIncident
+                    ? 'Edit incident report'
+                    : 'New incident report'
+                  : renderType === 'equipment'
+                    ? 'Add equipment asset'
+                    : 'Log property / evidence'}
+            </h2>
+
+            <p className="mt-2 text-sm text-muted-foreground">
+              {renderType === 'case'
+                ? 'Create a case file to organize related incident reports.'
+                : renderType === 'incident'
+                  ? 'Capture the facts, flags, codes, disposition, and narrative in one review-ready record.'
+                  : 'Fields marked with an asterisk (*) are required.'}
+            </p>
+          </div>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
+
+        {/* Form */}
+        <div className="grid gap-4 sm:grid-cols-2">
+
+          
+          {renderType === 'case' ? (
+            <>
+              <div className="space-y-1.5 sm:col-span-2">
+                <label
+                  htmlFor="case-number"
+                  className="text-xs font-medium"
+                >
+                  Case Number
+                  <span className="ml-1 text-red-500">*</span>
+                </label>
+
+                <Input
+                  id="case-number"
+                  placeholder="CASE-2026-0001"
+                  value={caseNumber}
+                  onChange={event => setCaseNumber(event.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <label
+                  htmlFor="case-title"
+                  className="text-xs font-medium"
+                >
+                  Case Title
+                  <span className="ml-1 text-red-500">*</span>
+                </label>
+
+                <Input
+                  id="case-title"
+                  placeholder="Burglary investigation"
+                  value={caseTitle}
+                  onChange={event => setCaseTitle(event.target.value)}
+                  required
+                />
+              </div>
+            </>
+
+          ) : renderType === 'incident' ? (
+            <>
+              {/* Incident identification */}
+              <div className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
+                {field(
+                  'Report number',
+                  'reportNumber',
+                  'Auto-generated if blank'
+                )}
+
+                {field(
+                  'Incident date',
+                  'incidentDate',
+                  '',
+                  'date'
+                )}
+              </div>
+
+              {/* Incident location */}
+              {field('Location', 'location', '123 Main St / sector 4')}
+              {field('City', 'city', 'Springfield')}
+              {field('State', 'state', 'CA')}
+              {field('ZIP code', 'zipCode', '90210')}
+
+              {/* Subject information */}
+              {field('Subject name', 'subjectName', 'Full legal name')}
+
+              {field(
+                'Contact phone',
+                'subjectPhone',
+                '(555) 000-0000',
+                'tel'
+              )}
+
+              {field(
+                'Date of birth',
+                'subjectDob',
+                'MM / DD / YYYY'
+              )}
+
+              {/* Incident flags */}
+              <div className="grid gap-3 rounded-lg border border-border bg-muted/20 p-3 sm:col-span-2 sm:grid-cols-2">
+                <p className="text-xs font-medium sm:col-span-2">
+                  Report flags
+                </p>
+
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.violentFlag === '1'}
+                    onChange={event =>
+                      setForm(prev => ({
+                        ...prev,
+                        violentFlag: event.target.checked ? '1' : '',
+                      }))
+                    }
+                    className="size-4 accent-primary"
+                  />
+                  Violent subject / incident
+                </label>
+
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.banBarFlag === '1'}
+                    onChange={event =>
+                      setForm(prev => ({
+                        ...prev,
+                        banBarFlag: event.target.checked ? '1' : '',
+                      }))
+                    }
+                    className="size-4 accent-primary"
+                  />
+                  Ban / bar flag
+                </label>
+              </div>
+
+              {/* Incident codes and dispositions */}
+              <div className="space-y-3 sm:col-span-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-medium">
+                      Incident codes and dispositions
+                      <span className="ml-1 text-red-500">*</span>
+                    </p>
+
+                    <p className="text-xs text-muted-foreground">
+                      Pair every incident code with its disposition.
+                    </p>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addPair}
+                  >
+                    <Plus className="size-3.5" />
+                    Add pair
+                  </Button>
+                </div>
+
+                {codeDispositions.map((pair, index) => (
+                  <div
+                    key={`pair-${index}`}
+                    className="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 sm:grid-cols-[1fr_1.4fr_auto]"
+                  >
+                    {/* Incident code */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium">
+                        Incident Code
+                        <span className="ml-1 text-red-500">*</span>
+                      </label>
+
+                      <Input
+                        value={pair.code}
+                        onChange={event =>
+                          updatePair(index, 'code', event.target.value)
+                        }
+                        placeholder="e.g. 240"
+                        aria-label={`Incident code ${index + 1}`}
+                        required
+                      />
+                    </div>
+
+                    {/* Disposition */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium">
+                        Disposition
+                        <span className="ml-1 text-red-500">*</span>
+                      </label>
+
+                      <select
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        value={pair.disposition}
+                        onChange={event =>
+                          updatePair(
+                            index,
+                            'disposition',
+                            event.target.value
+                          )
+                        }
+                        aria-label={`Disposition for code ${index + 1}`}
+                        required
+                      >
+                        <option value="">
+                          Select disposition
+                        </option>
+
+                        {pair.disposition &&
+                          !DISPOSITIONS.some(
+                            option => option === pair.disposition
+                          ) && (
+                            <option value={pair.disposition}>
+                              {pair.disposition} (Legacy)
+                            </option>
+                          )}
+
+                        {DISPOSITIONS.map(disposition => (
+                          <option
+                            key={disposition}
+                            value={disposition}
+                          >
+                            {disposition}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Remove code/disposition pair */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="self-end"
+                      onClick={() => removePair(index)}
+                      disabled={codeDispositions.length === 1}
+                      aria-label={`Remove code ${index + 1}`}
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Associated evidence */}
+              <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3 sm:col-span-2">
+                <div>
+                  <p className="text-xs font-medium">
+                    Associated property / evidence
+                  </p>
+
+                  <p className="text-xs text-muted-foreground">
+                    Select one or more items tied to this report.
+                  </p>
+                </div>
+
+                {availableEvidence.length ? (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {availableEvidence.map(item => (
+                      <label
+                        key={item.id}
+                        className="flex cursor-pointer items-start gap-3 rounded-md border border-border bg-card p-3 text-sm transition-colors hover:bg-muted/40"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedEvidenceIds.includes(item.id)}
+                          onChange={() => toggleEvidence(item.id)}
+                          className="mt-0.5 size-4 accent-primary"
+                        />
+
+                        <span className="min-w-0">
+                          <span className="block font-medium">
+                            {item.itemNumber}
+                          </span>
+
+                          <span className="mt-1 block truncate text-xs text-muted-foreground">
+                            {item.description} · {item.location}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No property items yet. Log property first,
+                    then associate it here.
+                  </p>
+                )}
+              </div>
+
+              {/* Narrative */}
+              <label className="space-y-1.5 sm:col-span-2">
+                <span className="text-xs font-medium">
+                  Narrative
+                  <span className="ml-1 text-red-500">*</span>
+                </span>
+
+                <textarea
+                  className="min-h-36 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none ring-ring focus-visible:ring-[3px]"
+                  placeholder="Document the facts, sequence, witnesses, and actions taken…"
+                  value={form.narrative || ''}
+                  onChange={update('narrative')}
+                  required
+                  aria-required="true"
+                />
+              </label>
+            </>
+          ) : renderType === 'equipment' ? (
+            <>
+              {field(
+                'Equipment name',
+                'name',
+                'Body camera / radio / kit'
+              )}
+
+              {field(
+                'Serial number',
+                'serialNumber',
+                'Asset identifier'
+              )}
+
+              {equipmentAssignment}
+            </>
+          ) : (
+            <>
+              {field(
+                'Item number',
+                'itemNumber',
+                'EV-2026-0001'
+              )}
+
+              {field(
+                'Description',
+                'description',
+                'Describe the item and packaging'
+              )}
+
+              {field(
+                'Found / stored location',
+                'location',
+                'Evidence locker / room'
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Form actions */}
+        <div className="mt-7 flex justify-end gap-2 border-t border-border pt-5">
+          <Button
+            variant="ghost"
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+
+          <Button
+            onClick={save}
+            disabled={saving}
+          >
+            {saving
+              ? 'Saving…'
+              : initialIncident && type === 'incident'
+                ? 'Update report'
+                : 'Save securely'}
+
+            <ArrowUpRight className="size-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
