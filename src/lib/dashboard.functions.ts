@@ -7,6 +7,10 @@ import {
   requireRole,
 } from '@/lib/authorization.server'
 import { getCustomerContext } from '@/lib/customer-context.server'
+import {
+  generateOriginalReportNumber,
+  generateSupplementalReportNumber,
+} from '@/lib/report-numbering.server'
 
 export interface DashboardIncident {
   id: string
@@ -924,6 +928,8 @@ export const updateEvidenceIncident = createServerFn({
 
     return result.rows[0]
   })
+
+
 export const saveIncident = createServerFn({
   method: 'POST',
 })
@@ -955,43 +961,289 @@ export const saveIncident = createServerFn({
     }) => data,
   )
   .handler(async ({ data }) => {
-    const session = await getSession()
+    const authorizedUser = await requireActiveUser()
 
-    if (!session?.user) {
-      throw new Error('Not authenticated')
+    if (authorizedUser.role === 'support') {
+      throw new Error('Support cannot modify incident reports')
     }
 
-    const db = getDb()
     const customer = await getCustomerContext()
+    const db = getDb()
     const now = new Date().toISOString()
 
-    if (data.id) {
-      const result = await db.query<DashboardIncident>(
+    const client = await db.connect()
+
+    try {
+      await client.query('BEGIN')
+
+      // --------------------------------------------------
+      // EDIT EXISTING INCIDENT
+      // --------------------------------------------------
+
+      if (data.id) {
+        const existingResult = await client.query<{
+          id: string
+          user_id: string
+          approval_status: string
+        }>(
+          `
+            SELECT
+              id,
+              user_id,
+              approval_status
+            FROM incidents
+            WHERE id = $1
+              AND customer_id = $2
+            FOR UPDATE
+          `,
+          [data.id, customer.id],
+        )
+
+        const existing = existingResult.rows[0]
+
+        if (!existing) {
+          throw new Error('Incident not found')
+        }
+
+        if (
+          existing.user_id !== authorizedUser.id &&
+          authorizedUser.role !== 'backend'
+        ) {
+          throw new Error(
+            'You cannot edit another officer’s report',
+          )
+        }
+
+        if (existing.approval_status === 'Approved') {
+          throw new Error(
+            'Approved reports cannot be edited. Create a supplemental report.',
+          )
+        }
+
+        const result = await client.query<DashboardIncident>(
+          `
+            UPDATE incidents
+            SET
+              incident_date = $1,
+              location = $2,
+              city = $3,
+              state = $4,
+              zip_code = $5,
+              subject_name = $6,
+              subject_phone = $7,
+              subject_dob = $8,
+              violent_flag = $9,
+              ban_bar_flag = $10,
+              incident_codes = $11,
+              disposition = $12,
+              narrative = $13,
+              approval_status = 'Pending',
+              review_feedback = NULL,
+              reviewed_by = NULL,
+              reviewed_at = NULL
+            WHERE id = $14
+              AND customer_id = $15
+            RETURNING
+              id,
+              user_id AS "userId",
+              report_number AS "reportNumber",
+              incident_date AS "incidentDate",
+              location,
+              city,
+              state,
+              zip_code AS "zipCode",
+              subject_name AS "subjectName",
+              subject_phone AS "subjectPhone",
+              subject_dob AS "subjectDob",
+              violent_flag AS "violentFlag",
+              ban_bar_flag AS "banBarFlag",
+              incident_codes AS "incidentCodes",
+              disposition,
+              narrative,
+              approval_status AS "approvalStatus",
+              approved_by AS "approvedBy",
+              approved_at AS "approvedAt",
+              review_feedback AS "reviewFeedback",
+              reviewed_by AS "reviewedBy",
+              reviewed_at AS "reviewedAt",
+              created_at AS "createdAt",
+              case_file_id AS "caseFileId",
+              parent_incident_id AS "parentIncidentId",
+              report_type AS "reportType"
+          `,
+          [
+            data.incidentDate,
+            data.location,
+            data.city,
+            data.state,
+            data.zipCode,
+            data.subjectName,
+            data.subjectPhone,
+            data.subjectDob,
+            data.violentFlag,
+            data.banBarFlag,
+            data.incidentCodes,
+            data.disposition,
+            data.narrative,
+            data.id,
+            customer.id,
+          ],
+        )
+
+        const updatedIncident = result.rows[0]
+
+        if (!updatedIncident) {
+          throw new Error('Incident update failed')
+        }
+
+        await client.query('COMMIT')
+
+        return updatedIncident
+      }
+
+      // --------------------------------------------------
+      // CREATE NEW ORIGINAL OR SUPPLEMENTAL
+      // --------------------------------------------------
+
+      const isSupplemental = Boolean(data.parentIncidentId)
+
+      let reportNumber: string
+      let parentIncidentId: string | null = null
+
+      let clientId: string | null = null
+      let siteId: string | null = null
+      let caseFileId: string | null = null
+
+      if (isSupplemental) {
+        // Resolve the original incident even if the user
+        // selected an existing supplemental.
+
+        const selectedResult = await client.query<{
+          id: string
+          parent_incident_id: string | null
+        }>(
+          `
+            SELECT
+              id,
+              parent_incident_id
+            FROM incidents
+            WHERE id = $1
+              AND customer_id = $2
+          `,
+          [data.parentIncidentId, customer.id],
+        )
+
+        const selected = selectedResult.rows[0]
+
+        if (!selected) {
+          throw new Error('Selected incident not found')
+        }
+
+        parentIncidentId =
+          selected.parent_incident_id || selected.id
+
+        // The original incident is authoritative for
+        // organizational and case-file associations.
+
+        const originalResult = await client.query<{
+          id: string
+          client_id: string | null
+          site_id: string | null
+          case_file_id: string | null
+        }>(
+          `
+            SELECT
+              id,
+              client_id,
+              site_id,
+              case_file_id
+            FROM incidents
+            WHERE id = $1
+              AND customer_id = $2
+              AND parent_incident_id IS NULL
+            FOR UPDATE
+          `,
+          [parentIncidentId, customer.id],
+        )
+
+        const original = originalResult.rows[0]
+
+        if (!original) {
+          throw new Error('Original incident not found')
+        }
+
+        clientId = original.client_id
+        siteId = original.site_id
+        caseFileId = original.case_file_id
+
+        // Numbering is serialized by locking the
+        // original incident within this transaction.
+
+        reportNumber =
+          await generateSupplementalReportNumber(
+            client,
+            customer.id,
+            parentIncidentId,
+          )
+      } else {
+        // One annual sequence across the entire customer,
+        // regardless of client or site.
+
+        const reportYear = new Date().getFullYear()
+
+        const generated =
+          await generateOriginalReportNumber(
+            client,
+            customer.id,
+            reportYear,
+          )
+
+        reportNumber = generated.reportNumber
+      }
+
+      // --------------------------------------------------
+      // INSERT INCIDENT
+      // --------------------------------------------------
+
+      const result = await client.query<DashboardIncident>(
         `
-          UPDATE incidents
-          SET
-            report_number = $1,
-            incident_date = $2,
-            location = $3,
-            city = $4,
-            state = $5,
-            zip_code = $6,
-            subject_name = $7,
-            subject_phone = $8,
-            subject_dob = $9,
-            violent_flag = $10,
-            ban_bar_flag = $11,
-            incident_codes = $12,
-            disposition = $13,
-            narrative = $14,
-            approval_status = $15,
-            review_feedback = $16,
-            reviewed_by = $17,
-            reviewed_at = $18,
-            case_file_id = $19,
-            parent_incident_id = $20,
-            report_type = $21
-          WHERE id = $22
+          INSERT INTO incidents (
+            id,
+            user_id,
+            customer_id,
+            report_number,
+            incident_date,
+            location,
+            city,
+            state,
+            zip_code,
+            subject_name,
+            subject_phone,
+            subject_dob,
+            violent_flag,
+            ban_bar_flag,
+            incident_codes,
+            disposition,
+            narrative,
+            approval_status,
+            review_feedback,
+            reviewed_by,
+            reviewed_at,
+            created_at,
+            client_id,
+            site_id,
+            case_file_id,
+            parent_incident_id,
+            report_type
+          )
+          VALUES (
+            $1, $2, $3, $4, $5,
+            $6, $7, $8, $9, $10,
+            $11, $12, $13, $14, $15,
+            $16, $17, 'Pending', NULL,
+            NULL, NULL, $18, $19, $20,
+            $21, $22, $23
+          )
           RETURNING
             id,
             user_id AS "userId",
@@ -1021,8 +1273,11 @@ export const saveIncident = createServerFn({
             report_type AS "reportType"
         `,
         [
-          data.reportNumber,
-          data.incidentDate,
+          crypto.randomUUID(),
+          authorizedUser.id,
+          customer.id,
+          reportNumber,
+          data.incidentDate || now.slice(0, 10),
           data.location,
           data.city,
           data.state,
@@ -1035,114 +1290,28 @@ export const saveIncident = createServerFn({
           data.incidentCodes,
           data.disposition,
           data.narrative,
-          data.approvalStatus,
-          data.reviewFeedback,
-          data.reviewedBy,
-          data.reviewedAt,
-          data.caseFileId,
-          data.parentIncidentId,
-          data.reportType,
-          data.id,
+          now,
+          clientId,
+          siteId,
+          caseFileId,
+          parentIncidentId,
+          isSupplemental ? 'Supplemental' : 'Original',
         ],
       )
 
-      if (!result.rows[0]) {
-        throw new Error('Incident not found')
+      const incident = result.rows[0]
+
+      if (!incident) {
+        throw new Error('Incident could not be created')
       }
 
-      return result.rows[0]
+      await client.query('COMMIT')
+
+      return incident
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
     }
-
-    const result = await db.query<DashboardIncident>(
-      `
-        INSERT INTO incidents (
-          id,
-          user_id,
-          customer_id,
-          report_number,
-          incident_date,
-          location,
-          city,
-          state,
-          zip_code,
-          subject_name,
-          subject_phone,
-          subject_dob,
-          violent_flag,
-          ban_bar_flag,
-          incident_codes,
-          disposition,
-          narrative,
-          approval_status,
-          review_feedback,
-          reviewed_by,
-          reviewed_at,
-          created_at,
-          case_file_id,
-          parent_incident_id,
-          report_type
-        )
-        VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8,
-          $9, $10, $11, $12, $13, $14, $15, $16,
-          $17, $18, $19, $20, $21, $22, $23, $24, $25
-        )
-        RETURNING
-          id,
-          user_id AS "userId",
-          report_number AS "reportNumber",
-          incident_date AS "incidentDate",
-          location,
-          city,
-          state,
-          zip_code AS "zipCode",
-          subject_name AS "subjectName",
-          subject_phone AS "subjectPhone",
-          subject_dob AS "subjectDob",
-          violent_flag AS "violentFlag",
-          ban_bar_flag AS "banBarFlag",
-          incident_codes AS "incidentCodes",
-          disposition,
-          narrative,
-          approval_status AS "approvalStatus",
-          approved_by AS "approvedBy",
-          approved_at AS "approvedAt",
-          review_feedback AS "reviewFeedback",
-          reviewed_by AS "reviewedBy",
-          reviewed_at AS "reviewedAt",
-          created_at AS "createdAt",
-          case_file_id AS "caseFileId",
-          parent_incident_id AS "parentIncidentId",
-          report_type AS "reportType"
-      `,
-      [
-        crypto.randomUUID(),
-        session.user.id,
-        customer.id,
-        data.reportNumber,
-        data.incidentDate || now.slice(0, 10),
-        data.location,
-        data.city,
-        data.state,
-        data.zipCode,
-        data.subjectName,
-        data.subjectPhone,
-        data.subjectDob,
-        data.violentFlag,
-        data.banBarFlag,
-        data.incidentCodes,
-        data.disposition,
-        data.narrative,
-        data.approvalStatus,
-        data.reviewFeedback,
-        data.reviewedBy,
-        data.reviewedAt,
-        data.createdAt || now,
-        data.caseFileId,
-        data.parentIncidentId,
-        data.reportType,
-      ],
-    )
-
-    return result.rows[0]
   })

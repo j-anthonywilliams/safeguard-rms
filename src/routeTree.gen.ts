@@ -17,6 +17,7 @@ import { Route as AppSchedulerRouteImport } from './routes/app/scheduler'
 import { Route as AppProfileRouteImport } from './routes/app/profile'
 import { Route as AppOrganizationRouteImport } from './routes/app/organization'
 import { Route as ApiTestRouteImport } from './routes/api/test'
+import { Route as ApiPlatformAuthSplatRouteImport } from './routes/api/platform-auth/$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const AppRoute = AppRouteImport.update({
@@ -59,6 +60,11 @@ const ApiTestRoute = ApiTestRouteImport.update({
   path: '/api/test',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPlatformAuthSplatRoute = ApiPlatformAuthSplatRouteImport.update({
+  id: '/api/platform-auth/$',
+  path: '/api/platform-auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -75,6 +81,7 @@ export interface FileRoutesByFullPath {
   '/app/users': typeof AppUsersRoute
   '/app/': typeof AppIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/platform-auth/$': typeof ApiPlatformAuthSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -85,6 +92,7 @@ export interface FileRoutesByTo {
   '/app/users': typeof AppUsersRoute
   '/app': typeof AppIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/platform-auth/$': typeof ApiPlatformAuthSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -97,6 +105,7 @@ export interface FileRoutesById {
   '/app/users': typeof AppUsersRoute
   '/app/': typeof AppIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/platform-auth/$': typeof ApiPlatformAuthSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -110,6 +119,7 @@ export interface FileRouteTypes {
     | '/app/users'
     | '/app/'
     | '/api/auth/$'
+    | '/api/platform-auth/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/app/users'
     | '/app'
     | '/api/auth/$'
+    | '/api/platform-auth/$'
   id:
     | '__root__'
     | '/'
@@ -131,6 +142,7 @@ export interface FileRouteTypes {
     | '/app/users'
     | '/app/'
     | '/api/auth/$'
+    | '/api/platform-auth/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -138,6 +150,7 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   ApiTestRoute: typeof ApiTestRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiPlatformAuthSplatRoute: typeof ApiPlatformAuthSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -198,6 +211,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTestRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/platform-auth/$': {
+      id: '/api/platform-auth/$'
+      path: '/api/platform-auth/$'
+      fullPath: '/api/platform-auth/$'
+      preLoaderRoute: typeof ApiPlatformAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -231,6 +251,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   ApiTestRoute: ApiTestRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiPlatformAuthSplatRoute: ApiPlatformAuthSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
