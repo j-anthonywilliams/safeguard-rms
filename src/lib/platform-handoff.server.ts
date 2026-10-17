@@ -1,6 +1,8 @@
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
-
+import {
+  verifyCustomerServiceCredential,
+} from './platform-service-auth.server'
 import { getPlatformDb } from './platform-db.server'
 import { requirePlatformSession } from './platform-auth.server'
 import { requireCustomerAccess } from './platform-authorization.server'
@@ -194,4 +196,45 @@ export async function redeemPlatformHandoff(
   } finally {
     client.release()
   }
+}
+
+/**
+ * Redeems a platform handoff after authenticating
+ * the requesting customer service.
+ *
+ * The customer ID must be derived from trusted
+ * server configuration, not browser input.
+ *
+ * This function must only be invoked through
+ * a server-to-server authentication boundary.
+ */
+export async function redeemTrustedPlatformHandoff(
+  code: string,
+  customerId: string,
+  serviceCredential: string,
+): Promise<RedeemedPlatformHandoff> {
+  const verifiedService =
+    await verifyCustomerServiceCredential(
+      serviceCredential,
+      customerId,
+    )
+
+  if (verifiedService.customerId !== customerId) {
+    throw new Error(
+      'Customer service identity mismatch',
+    )
+  }
+
+  const redeemed = await redeemPlatformHandoff(
+    code,
+    verifiedService.customerId,
+  )
+
+  if (redeemed.customerId !== verifiedService.customerId) {
+    throw new Error(
+      'Authentication handoff customer mismatch',
+    )
+  }
+
+  return redeemed
 }

@@ -52,6 +52,7 @@
     "react-hot-toast": "^2.6.0",
     "react-responsive": "^10.0.1",
     "recharts": "^3.10.1",
+    "resend": "^6.34.1",
     "serve": "^14.2.6",
     "sonner": "^2.0.8",
     "srvx": "^1.0.5",

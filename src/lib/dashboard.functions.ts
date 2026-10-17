@@ -102,26 +102,19 @@ export interface DashboardDirectoryUser {
 export const getDashboardData = createServerFn({
   method: 'GET',
 }).handler(async () => {
-  const session = await getSession()
+  
+  const authorizedUser = await requireRole([
+    'user',
+    'supervisor',
+    'admin',
+    'backend',
+  ])
 
-  if (!session?.user) {
-    throw new Error('Not authenticated')
-  }
-
-  const userId = session.user.id
+  const customer = await getCustomerContext()
+  const userId = authorizedUser.id
+  const accessLevel = authorizedUser.role
   const db = getDb()
 
-  const roleResult = await db.query<{ role: AccessLevel }>(
-    `
-      SELECT role
-      FROM app_roles
-      WHERE user_id = $1
-      LIMIT 1
-    `,
-    [userId],
-  )
-
-  const accessLevel = roleResult.rows[0]?.role ?? 'user'
 
   const canViewAllIncidents = [
     'supervisor',
@@ -158,10 +151,13 @@ export const getDashboardData = createServerFn({
           case_file_id AS "caseFileId",
           parent_incident_id AS "parentIncidentId",
           report_type AS "reportType"
-        FROM incidents
-        ORDER BY created_at DESC
-        LIMIT 100
-      `)
+                FROM incidents
+                WHERE customer_id = $1
+                ORDER BY created_at DESC
+                LIMIT 100
+              `,
+              [customer.id],
+            )
     : db.query<DashboardIncident>(
         `
           SELECT
@@ -193,10 +189,11 @@ export const getDashboardData = createServerFn({
             report_type AS "reportType"
           FROM incidents
           WHERE user_id = $1
+            AND customer_id = $2
           ORDER BY created_at DESC
           LIMIT 100
         `,
-        [userId],
+        [userId, customer.id],
       )
 
   const [
@@ -221,13 +218,14 @@ export const getDashboardData = createServerFn({
           lead_officer AS "leadOfficer",
           created_at AS "createdAt",
           updated_at AS "updatedAt"
-        FROM case_files
-        WHERE user_id = $1
-        ORDER BY updated_at DESC
-        LIMIT 100
-      `,
-      [userId],
-    ),
+          FROM case_files
+          WHERE user_id = $1
+            AND customer_id = $2
+          ORDER BY updated_at DESC
+          LIMIT 100
+        `,
+        [userId, customer.id],
+      ),
 
     db.query<DashboardEquipment>(
       `
@@ -241,10 +239,11 @@ export const getDashboardData = createServerFn({
           updated_at AS "updatedAt"
         FROM equipment
         WHERE user_id = $1
+          AND customer_id = $2
         ORDER BY updated_at DESC
         LIMIT 8
       `,
-      [userId],
+      [userId, customer.id],
     ),
 
     db.query<DashboardEvidence>(
@@ -260,28 +259,35 @@ export const getDashboardData = createServerFn({
           created_at AS "createdAt"
         FROM evidence
         WHERE user_id = $1
+          AND customer_id = $2
         ORDER BY created_at DESC
-        LIMIT 8
+        LIMIT 100
       `,
-      [userId],
+      [userId, customer.id],
     ),
 
     db.query<DashboardCustodyEvent>(
       `
         SELECT
-          id,
-          user_id AS "userId",
-          evidence_id AS "evidenceId",
-          action,
-          actor,
-          note,
-          event_at AS "eventAt"
-        FROM custody_events
-        WHERE user_id = $1
-        ORDER BY event_at DESC
-        LIMIT 10
-      `,
-      [userId],
+          ce.id,
+          ce.user_id AS "userId",
+          ce.evidence_id AS "evidenceId",
+          ce.action,
+          ce.actor,
+          ce.note,
+          ce.event_at AS "eventAt"
+          FROM custody_events ce
+          WHERE ce.user_id = $1
+            AND EXISTS (
+              SELECT 1
+              FROM evidence e
+              WHERE e.id = ce.evidence_id
+                AND e.customer_id = $2
+            )
+          ORDER BY ce.event_at DESC
+          LIMIT 10
+        `,
+        [userId, customer.id],
     ),
 
     db.query<DashboardAttendanceLog>(
@@ -296,28 +302,34 @@ export const getDashboardData = createServerFn({
           accuracy
         FROM attendance_logs
         WHERE user_id = $1
+          AND customer_id = $2
         ORDER BY event_at DESC
         LIMIT 30
       `,
-      [userId],
+      [userId, customer.id],
     ),
 
-    db.query<DashboardDirectoryUser>(`
-      SELECT
-        id,
-        email,
-        display_name AS "displayName"
-      FROM users
-      ORDER BY created_at ASC
-      LIMIT 100
-    `),
+    db.query<DashboardDirectoryUser>(
+      `
+        SELECT
+          id,
+          email,
+          display_name AS "displayName"
+        FROM users
+        WHERE COALESCE(is_archived, 0) = 0
+        ORDER BY created_at ASC
+        LIMIT 100
+      `,
+    ),
   ])
 
   return {
     user: {
-      id: session.user.id,
-      email: session.user.email,
-      displayName: session.user.name,
+      id: authorizedUser.id,
+      email: authorizedUser.email,
+      displayName:
+        usersResult.rows.find(user => user.id === authorizedUser.id)
+          ?.displayName ?? null,
     },
     accessLevel,
     incidents: incidentsResult.rows,
@@ -398,85 +410,6 @@ export const createAttendanceLog = createServerFn({
   })
 
 
-  export const approveIncident = createServerFn({
-  method: 'POST',
-})
-  .inputValidator(
-    (data: {
-      incidentId: string
-    }) => data,
-  )
-  .handler(async ({ data }) => {
-    const authorizedUser = await requireRole([
-      'supervisor',
-      'admin',
-      'backend',
-    ])
-
-    const session = await getSession()
-
-    if (!session?.user || session.user.id !== authorizedUser.id) {
-      throw new Error('Authentication required')
-    }
-
-    const db = getDb()
-
-    const approvedAt = new Date().toISOString()
-    const approvedBy =
-      session.user.name ||
-      session.user.email ||
-      'Supervisor'
-
-    const result = await db.query<DashboardIncident>(
-      `
-        UPDATE incidents
-        SET
-          approval_status = 'Approved',
-          approved_by = $1,
-          approved_at = $2
-        WHERE id = $3
-        RETURNING
-          id,
-          user_id AS "userId",
-          report_number AS "reportNumber",
-          incident_date AS "incidentDate",
-          location,
-          city,
-          state,
-          zip_code AS "zipCode",
-          subject_name AS "subjectName",
-          subject_phone AS "subjectPhone",
-          subject_dob AS "subjectDob",
-          violent_flag AS "violentFlag",
-          ban_bar_flag AS "banBarFlag",
-          incident_codes AS "incidentCodes",
-          disposition,
-          narrative,
-          approval_status AS "approvalStatus",
-          approved_by AS "approvedBy",
-          approved_at AS "approvedAt",
-          review_feedback AS "reviewFeedback",
-          reviewed_by AS "reviewedBy",
-          reviewed_at AS "reviewedAt",
-          created_at AS "createdAt",
-          case_file_id AS "caseFileId",
-          parent_incident_id AS "parentIncidentId",
-          report_type AS "reportType"
-        `,
-      [
-        approvedBy,
-        approvedAt,
-        data.incidentId,
-      ],
-    )
-
-    if (!result.rows[0]) {
-      throw new Error('Incident not found')
-    }
-
-    return result.rows[0]
-  })
-
 export const reviewIncident = createServerFn({
   method: 'POST',
 })
@@ -501,12 +434,19 @@ export const reviewIncident = createServerFn({
     }
 
     if (
-      data.decision === 'Rejected' &&
-      !data.feedback.trim()
+      data.decision !== 'Approved' &&
+      data.decision !== 'Rejected'
     ) {
-      throw new Error('Feedback is required')
+      throw new Error('Invalid review decision')
     }
 
+    const feedback = data.feedback.trim()
+
+    if (data.decision === 'Rejected' && !feedback) {
+      throw new Error('Feedback is required when rejecting a report')
+    }
+
+    const customer = await getCustomerContext()
     const db = getDb()
 
     const reviewedAt = new Date().toISOString()
@@ -515,68 +455,184 @@ export const reviewIncident = createServerFn({
       session.user.email ||
       'Supervisor'
 
-    const result = await db.query<DashboardIncident>(
-      `
-        UPDATE incidents
-        SET
-          approval_status = $1,
-          review_feedback = $2,
-          reviewed_by = $3,
-          reviewed_at = $4,
-          approved_by =
-            CASE
-              WHEN $1 = 'Approved' THEN $3
-              ELSE NULL
-            END,
-          approved_at =
-            CASE
-              WHEN $1 = 'Approved' THEN $4
-              ELSE NULL
-            END
-        WHERE id = $5
-        RETURNING
-          id,
-          user_id AS "userId",
-          report_number AS "reportNumber",
-          incident_date AS "incidentDate",
-          location,
-          city,
-          state,
-          zip_code AS "zipCode",
-          subject_name AS "subjectName",
-          subject_phone AS "subjectPhone",
-          subject_dob AS "subjectDob",
-          violent_flag AS "violentFlag",
-          ban_bar_flag AS "banBarFlag",
-          incident_codes AS "incidentCodes",
-          disposition,
-          narrative,
-          approval_status AS "approvalStatus",
-          approved_by AS "approvedBy",
-          approved_at AS "approvedAt",
-          review_feedback AS "reviewFeedback",
-          reviewed_by AS "reviewedBy",
-          reviewed_at AS "reviewedAt",
-          created_at AS "createdAt",
-          case_file_id AS "caseFileId",
-          parent_incident_id AS "parentIncidentId",
-          report_type AS "reportType"
+    const client = await db.connect()
+
+    try {
+      await client.query('BEGIN')
+
+      // Lock the report to prevent simultaneous review decisions.
+      const existingResult = await client.query<{
+        id: string
+        user_id: string
+        report_number: string
+        approval_status: string
+      }>(
+        `
+          SELECT
+            id,
+            user_id,
+            report_number,
+            approval_status
+          FROM incidents
+          WHERE id = $1
+            AND customer_id = $2
+          FOR UPDATE
         `,
-      [
-        data.decision,
-        data.feedback.trim() || null,
-        reviewer,
-        reviewedAt,
-        data.incidentId,
-      ],
-    )
+        [data.incidentId, customer.id],
+      )
 
-    if (!result.rows[0]) {
-      throw new Error('Incident not found')
+      const existing = existingResult.rows[0]
+
+      if (!existing) {
+        throw new Error('Incident not found')
+      }
+
+      if (existing.approval_status !== 'Pending') {
+        throw new Error(
+          'Only pending reports may be approved or rejected',
+        )
+      }
+
+      // Resolve the originating officer before changing the report.
+      let recipientEmail: string | null = null
+
+      if (data.decision === 'Rejected') {
+        const officerResult = await client.query<{
+          email: string
+        }>(
+          `
+            SELECT email
+            FROM users
+            WHERE id = $1
+              AND COALESCE(is_archived, 0) = 0
+            LIMIT 1
+          `,
+          [existing.user_id],
+        )
+
+        recipientEmail = officerResult.rows[0]?.email ?? null
+
+        if (!recipientEmail) {
+          throw new Error(
+            'Originating officer has no active email account',
+          )
+        }
+      }
+
+      // Apply the review decision.
+      const result = await client.query<DashboardIncident>(
+        `
+          UPDATE incidents
+          SET
+            approval_status = $1,
+            review_feedback = $2,
+            reviewed_by = $3,
+            reviewed_at = $4,
+            approved_by =
+              CASE
+                WHEN $1 = 'Approved' THEN $3
+                ELSE NULL
+              END,
+            approved_at =
+              CASE
+                WHEN $1 = 'Approved' THEN $4
+                ELSE NULL
+              END
+          WHERE id = $5
+            AND customer_id = $6
+            AND approval_status = 'Pending'
+          RETURNING
+            id,
+            user_id AS "userId",
+            report_number AS "reportNumber",
+            incident_date AS "incidentDate",
+            location,
+            city,
+            state,
+            zip_code AS "zipCode",
+            subject_name AS "subjectName",
+            subject_phone AS "subjectPhone",
+            subject_dob AS "subjectDob",
+            violent_flag AS "violentFlag",
+            ban_bar_flag AS "banBarFlag",
+            incident_codes AS "incidentCodes",
+            disposition,
+            narrative,
+            approval_status AS "approvalStatus",
+            approved_by AS "approvedBy",
+            approved_at AS "approvedAt",
+            review_feedback AS "reviewFeedback",
+            reviewed_by AS "reviewedBy",
+            reviewed_at AS "reviewedAt",
+            created_at AS "createdAt",
+            case_file_id AS "caseFileId",
+            parent_incident_id AS "parentIncidentId",
+            report_type AS "reportType"
+        `,
+        [
+          data.decision,
+          feedback || null,
+          reviewer,
+          reviewedAt,
+          data.incidentId,
+          customer.id,
+        ],
+      )
+
+      const incident = result.rows[0]
+
+      if (!incident) {
+        throw new Error('Incident review could not be completed')
+      }
+
+      // Queue an email only when a report is rejected.
+      if (data.decision === 'Rejected' && recipientEmail) {
+        const payload = {
+          reportNumber: existing.report_number,
+          reviewer,
+          feedback,
+          reviewedAt,
+        }
+
+        await client.query(
+          `
+            INSERT INTO notification_outbox (
+              id,
+              customer_id,
+              notification_type,
+              reference_id,
+              recipient_user_id,
+              recipient_email,
+              payload,
+              status
+            )
+            VALUES (
+              $1, $2, $3, $4, $5, $6, $7, 'pending'
+            )
+          `,
+          [
+            crypto.randomUUID(),
+            customer.id,
+            'incident_rejected',
+            existing.id,
+            existing.user_id,
+            recipientEmail,
+            JSON.stringify(payload),
+          ],
+        )
+      }
+
+      await client.query('COMMIT')
+
+      return incident
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
     }
-
-    return result.rows[0]
   })
+
 
 export const getPanelEvidence = createServerFn({
   method: 'GET',
@@ -599,7 +655,7 @@ export const getPanelEvidence = createServerFn({
       FROM evidence
       WHERE user_id = $1
       ORDER BY created_at DESC
-      LIMIT 100
+      LIMIT 8
     `,
     [authorizedUser.id],
   )
@@ -897,6 +953,7 @@ export const updateEvidenceIncident = createServerFn({
       'backend',
     ])
 
+    const customer = await getCustomerContext()
     const db = getDb()
 
     const result = await db.query<DashboardEvidence>(
@@ -905,6 +962,16 @@ export const updateEvidenceIncident = createServerFn({
         SET incident_id = $1
         WHERE id = $2
           AND user_id = $3
+          AND customer_id = $4
+          AND (
+            $1::text IS NULL
+            OR EXISTS (
+              SELECT 1
+              FROM incidents
+              WHERE incidents.id = $1
+                AND incidents.customer_id = $4
+            )
+          )
         RETURNING
           id,
           user_id AS "userId",
@@ -919,6 +986,7 @@ export const updateEvidenceIncident = createServerFn({
         data.incidentId,
         data.evidenceId,
         authorizedUser.id,
+        customer.id,
       ],
     )
 

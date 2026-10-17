@@ -8,7 +8,6 @@ import {
 import { createFileRoute } from '@tanstack/react-router'
 import { authClient } from '@/lib/auth-client'
 import {
-  approveIncident as approveIncidentServer,
   createAttendanceLog,
   createCaseFile,
   createEvidence,
@@ -170,6 +169,8 @@ function DashboardHome() {
   const [activePanel, setActivePanel] = useState<'incident' | 'equipment' | 'evidence' | 'case' | 'review' | null>(null)
   const [editingIncident, setEditingIncident] = useState<Incident | null>(null)
   const [reviewingIncident, setReviewingIncident] = useState<Incident | null>(null)
+  const [rejectionFeedback, setRejectionFeedback] = useState('')
+  const [reviewBusy, setReviewBusy] = useState(false)
   const [dark, setDark] = useState(false)
   const [accessLevel, setAccessLevel] = useState<AccessLevel>('user')
   const [directoryUsers, setDirectoryUsers] = useState<{ id: string; email: string; displayName?: string | null }[]>([])
@@ -258,47 +259,37 @@ function DashboardHome() {
   }
   const lastAttendance = attendanceLogs[0]
   const isClockedIn = lastAttendance?.eventType === 'clock_in'
-    const approveIncident = async (incident: Incident) => {
-      if (!canApproveIncidents(accessLevel)) return
-
-      try {
-        const updatedIncident = await approveIncidentServer({
-          data: {
-            incidentId: incident.id,
-          },
-        })
-
-        setIncidents(current =>
-          current.map(item =>
-            item.id === incident.id
-              ? updatedIncident
-              : item,
-          ),
-        )
-
-        toast.success('Incident approved', {
-          description: `${incident.reportNumber} is now approved.`,
-        })
-      } catch (error) {
-        toast.error('Could not approve incident', {
-          description:
-            error instanceof Error
-              ? error.message
-              : 'Please try again.',
-        })
-      }
+    
+  const reviewIncident = (incident: Incident) => { setReviewingIncident(incident); setActivePanel('review') }
+  
+  const decideIncident = async (
+    decision: 'Approved' | 'Rejected',
+    feedback: string,
+  ) => {
+    if (!reviewingIncident || !canApproveIncidents(accessLevel)) {
+      return
     }
 
-  const reviewIncident = (incident: Incident) => { setReviewingIncident(incident); setActivePanel('review') }
-  const decideIncident = async (decision: 'Approved' | 'Rejected', feedback: string) => {
-    if (!reviewingIncident || !canApproveIncidents(accessLevel)) return
-    if (decision === 'Rejected' && !feedback.trim()) { toast.error('Feedback is required', { description: 'Tell the originating officer what needs to change.' }); return }
+    if (reviewBusy) {
+      return
+    }
+
+    if (decision === 'Rejected' && !feedback.trim()) {
+      toast.error('Feedback is required', {
+        description:
+          'Tell the originating officer what needs to change.',
+      })
+      return
+    }
+
+    setReviewBusy(true)
+
     try {
-            const updatedIncident = await reviewIncidentServer({
+      const updatedIncident = await reviewIncidentServer({
         data: {
           incidentId: reviewingIncident.id,
           decision,
-          feedback,
+          feedback: feedback.trim(),
         },
       })
 
@@ -309,10 +300,34 @@ function DashboardHome() {
             : item,
         ),
       )
-      setActivePanel(null); setReviewingIncident(null)
-      toast.success(decision === 'Approved' ? 'Report approved' : 'Report returned to officer', { description: decision === 'Approved' ? `${reviewingIncident.reportNumber} is approved.` : 'The officer can update the report and resubmit it.' })
-    } catch (error) { toast.error('Could not update review', { description: error instanceof Error ? error.message : 'Please try again.' }) }
+
+      setActivePanel(null)
+      setReviewingIncident(null)
+      setRejectionFeedback('')
+
+      toast.success(
+        decision === 'Approved'
+          ? 'Report approved'
+          : 'Report returned to officer',
+        {
+          description:
+            decision === 'Approved'
+              ? `${reviewingIncident.reportNumber} is approved.`
+              : 'The officer can update the report and resubmit it.',
+        },
+      )
+    } catch (error) {
+      toast.error('Could not update review', {
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Please try again.',
+      })
+    } finally {
+      setReviewBusy(false)
+    }
   }
+
   const openIncidentEditor = (incident?: Incident) => {
     setEditingIncident(incident || null)
     setActivePanel('incident')
@@ -468,35 +483,99 @@ return (
         />
       </section>
 
+
       {canApproveIncidents(accessLevel) && (
-        <Card className="border-primary/30 bg-primary/5">
-          <CardContent className="flex flex-col justify-between gap-4 p-5 sm:flex-row sm:items-center">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Eye className="size-4" />
-              </div>
+        <Card className="overflow-hidden border-primary/30">
+          <CardHeader className="flex flex-row items-center justify-between border-b border-border bg-muted/30 pb-4">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ShieldCheck className="size-4" />
+                Supervisor Review Queue
+              </CardTitle>
 
-              <div>
-                <p className="text-sm font-semibold">
-                  Supervisor review queue
-                </p>
-
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {pendingReviews.length
-                    ? `${pendingReviews.length} report${pendingReviews.length === 1 ? '' : 's'} waiting for approval.`
-                    : 'No reports are waiting for approval.'}
-                </p>
-              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {pendingReviews.length === 0
+                  ? 'No reports are waiting for approval.'
+                  : `${pendingReviews.length} report${
+                      pendingReviews.length === 1 ? '' : 's'
+                    } awaiting supervisory review.`}
+              </p>
             </div>
 
-            {pendingReviews.length > 0 && (
-              <Button
-                size="sm"
-                onClick={() => reviewIncident(pendingReviews[0])}
-              >
-                Review next
-                <ArrowUpRight className="size-3.5" />
-              </Button>
+            <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+              {pendingReviews.length} Pending
+            </span>
+          </CardHeader>
+
+          <CardContent className="p-0">
+            {pendingReviews.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
+                <Check className="size-8 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  All reports have been reviewed.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {pendingReviews.map(incident => {
+                  const originatingOfficer =
+                    directoryUsers.find(
+                      officer => officer.id === incident.userId,
+                    )
+
+                  return (
+                    <div
+                      key={incident.id}
+                      className="flex flex-col gap-3 p-4 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-sm font-semibold">
+                            {incident.reportNumber}
+                          </span>
+
+                          <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                            Pending
+                          </span>
+
+                          {incident.reportType === 'Supplemental' && (
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
+                              Supplemental
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-sm text-foreground">
+                          {incident.location || 'Location not specified'}
+                        </p>
+
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                          <span>
+                            Incident: {incident.incidentDate}
+                          </span>
+
+                          <span>
+                            Officer:{' '}
+                            {originatingOfficer?.displayName ||
+                              originatingOfficer?.email ||
+                              'Unknown'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() => reviewIncident(incident)}
+                      >
+                        <Eye className="mr-2 size-4" />
+                        Open Report
+                      </Button>
+                    </div>
+                  )
+                })}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -579,17 +658,6 @@ return (
                           ? 'BAN / BAR'
                           : 'STANDARD'}
                     </span>
-
-                    {canApproveIncidents(accessLevel) &&
-                      item.approvalStatus !== 'Approved' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => approveIncident(item)}
-                        >
-                          Approve
-                        </Button>
-                      )}
 
                     <Button
                       variant="outline"
@@ -835,6 +903,152 @@ return (
       </section>
     </main>
 
+{activePanel === 'review' &&
+  reviewingIncident &&
+  canApproveIncidents(accessLevel) && (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm">
+      <div className="max-h-[92dvh] w-full max-w-3xl overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-xl">
+
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs text-muted-foreground">
+              Incident Report Review
+            </p>
+            <h2 className="text-xl font-semibold">
+              Report {reviewingIncident.reportNumber}
+            </h2>
+          </div>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={reviewBusy}
+            onClick={() => {
+              setActivePanel(null)
+              setReviewingIncident(null)
+              setRejectionFeedback('')
+            }}
+            aria-label="Close review"
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
+
+        <div className="grid gap-4 rounded-lg border border-border p-4 text-sm sm:grid-cols-2">
+          <div>
+            <p className="text-xs text-muted-foreground">
+              Incident Date
+            </p>
+            <p>{reviewingIncident.incidentDate}</p>
+          </div>
+
+          <div>
+            <p className="text-xs text-muted-foreground">
+              Approval Status
+            </p>
+            <p>{reviewingIncident.approvalStatus}</p>
+          </div>
+
+          <div className="sm:col-span-2">
+            <p className="text-xs text-muted-foreground">
+              Location
+            </p>
+            <p>
+              {reviewingIncident.location},{' '}
+              {reviewingIncident.city},{' '}
+              {reviewingIncident.state}{' '}
+              {reviewingIncident.zipCode}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs text-muted-foreground">
+              Subject
+            </p>
+            <p>{reviewingIncident.subjectName || 'Not provided'}</p>
+          </div>
+
+          <div>
+            <p className="text-xs text-muted-foreground">
+              Report Type
+            </p>
+            <p>{reviewingIncident.reportType}</p>
+          </div>
+
+          <div className="sm:col-span-2">
+            <p className="text-xs text-muted-foreground">
+              Incident Codes / Dispositions
+            </p>
+            {parseCodeDispositions(reviewingIncident).map(
+              (pair, index) => (
+                <p key={index}>
+                  {pair.code} — {pair.disposition}
+                </p>
+              ),
+            )}
+          </div>
+
+          <div className="sm:col-span-2">
+            <p className="mb-2 text-xs font-medium">
+              Narrative
+            </p>
+            <div className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted/30 p-4">
+              {reviewingIncident.narrative}
+            </div>
+          </div>
+        </div>
+
+        {reviewingIncident.approvalStatus !== 'Approved' && (
+          <div className="mt-5 space-y-3">
+            <label
+              htmlFor="rejection-feedback"
+              className="text-sm font-medium"
+            >
+              Review Feedback
+            </label>
+
+            <textarea
+              id="rejection-feedback"
+              value={rejectionFeedback}
+              onChange={event =>
+                setRejectionFeedback(event.target.value)
+              }
+              placeholder="Explain required corrections if rejecting this report..."
+              className="min-h-24 w-full rounded-md border border-input bg-transparent p-3 text-sm"
+            />
+
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                variant="outline"
+                disabled={reviewBusy}
+                onClick={() =>
+                  void decideIncident(
+                    'Rejected',
+                    rejectionFeedback,
+                  )
+                }
+              >
+                Reject Report
+              </Button>
+
+              <Button
+                disabled={reviewBusy}
+                onClick={() =>
+                  void decideIncident(
+                    'Approved',
+                    rejectionFeedback,
+                  )
+                }
+              >
+                Approve Report
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )}
+
 {activePanel && activePanel !== 'review' && (
   <Panel
     type={activePanel}
@@ -855,6 +1069,47 @@ return (
 )}
 
 <DevAccountSwitcher />
+  
+  {import.meta.env.DEV && (
+    <Button
+      type="button"
+      variant="outline"
+      onClick={async () => {
+        try {
+          await reviewIncidentServer({
+            data: {
+              incidentId: 'INVALID-AUTHORIZATION-TEST-ID',
+              decision: 'Approved',
+              feedback: '',
+            },
+          })
+
+          toast.error('SECURITY TEST FAILED', {
+            description: 'Unauthorized approval was accepted.',
+          })
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : String(error)
+
+          if (message.includes('Insufficient permissions')) {
+            toast.success('SECURITY TEST PASSED', {
+              description:
+                'The server denied approval for the User role.',
+            })
+          } else {
+            toast.error('SECURITY TEST INCONCLUSIVE', {
+              description: message,
+            })
+          }
+        }
+      }}
+    >
+      Test Approval Authorization
+    </Button>
+  )}
+
   </div>
 )
 }
