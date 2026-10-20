@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as PlatformLoginRouteImport } from './routes/platform-login'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
@@ -20,6 +21,11 @@ import { Route as ApiTestRouteImport } from './routes/api/test'
 import { Route as ApiPlatformAuthSplatRouteImport } from './routes/api/platform-auth/$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
+const PlatformLoginRoute = PlatformLoginRouteImport.update({
+  id: '/platform-login',
+  path: '/platform-login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppRoute = AppRouteImport.update({
   id: '/app',
   path: '/app',
@@ -74,6 +80,7 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/platform-login': typeof PlatformLoginRoute
   '/api/test': typeof ApiTestRoute
   '/app/organization': typeof AppOrganizationRoute
   '/app/profile': typeof AppProfileRoute
@@ -85,6 +92,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/platform-login': typeof PlatformLoginRoute
   '/api/test': typeof ApiTestRoute
   '/app/organization': typeof AppOrganizationRoute
   '/app/profile': typeof AppProfileRoute
@@ -98,6 +106,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/platform-login': typeof PlatformLoginRoute
   '/api/test': typeof ApiTestRoute
   '/app/organization': typeof AppOrganizationRoute
   '/app/profile': typeof AppProfileRoute
@@ -112,6 +121,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/app'
+    | '/platform-login'
     | '/api/test'
     | '/app/organization'
     | '/app/profile'
@@ -123,6 +133,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/platform-login'
     | '/api/test'
     | '/app/organization'
     | '/app/profile'
@@ -135,6 +146,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/app'
+    | '/platform-login'
     | '/api/test'
     | '/app/organization'
     | '/app/profile'
@@ -148,6 +160,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  PlatformLoginRoute: typeof PlatformLoginRoute
   ApiTestRoute: typeof ApiTestRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiPlatformAuthSplatRoute: typeof ApiPlatformAuthSplatRoute
@@ -155,6 +168,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/platform-login': {
+      id: '/platform-login'
+      path: '/platform-login'
+      fullPath: '/platform-login'
+      preLoaderRoute: typeof PlatformLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app': {
       id: '/app'
       path: '/app'
@@ -249,6 +269,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  PlatformLoginRoute: PlatformLoginRoute,
   ApiTestRoute: ApiTestRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiPlatformAuthSplatRoute: ApiPlatformAuthSplatRoute,

@@ -13,7 +13,9 @@ export function getPlatformDb(): Pool {
   const connectionString = process.env.PLATFORM_DATABASE_URL
 
   if (!connectionString) {
-    throw new Error('PLATFORM_DATABASE_URL is not configured')
+    throw new Error(
+      'PLATFORM_DATABASE_URL is not configured',
+    )
   }
 
   if (!platformPool) {

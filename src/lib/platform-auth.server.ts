@@ -38,6 +38,8 @@ async function isBackendPlatformUser(
 function createPlatformAuth() {
   const baseURL = process.env.PLATFORM_AUTH_URL
   const secret = process.env.PLATFORM_AUTH_SECRET
+  const googleClientId = process.env.GOOGLE_CLIENT_ID
+  const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
 
   if (!baseURL) {
     throw new Error(
@@ -66,6 +68,19 @@ function createPlatformAuth() {
     emailAndPassword: {
       enabled: true,
     },
+
+    socialProviders:
+      googleClientId && googleClientSecret
+        ? {
+            google: {
+              clientId: googleClientId,
+              clientSecret: googleClientSecret,
+
+              // Prevent automatic creation of new platform accounts.
+              disableImplicitSignUp: true,
+            },
+          }
+        : {},
 
     plugins: [
       jwt(),
