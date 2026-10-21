@@ -41,8 +41,7 @@ export const getOrganizationStructure = createServerFn({
 
   // Platform roles have global organizational visibility.
   // Other roles require an explicit organizational assignment.
-  const hasGlobalAccess =
-    user.role === 'support' || user.role === 'backend'
+  const hasGlobalAccess = user.role === 'backend'
 
   const customerResult = await db.query<OrganizationCustomer>(
     `
