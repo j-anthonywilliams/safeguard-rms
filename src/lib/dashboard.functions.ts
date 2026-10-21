@@ -117,7 +117,6 @@ export const getDashboardData = createServerFn({
 
 
   const canViewAllIncidents = [
-    'supervisor',
     'admin',
     'backend',
   ].includes(accessLevel)
@@ -187,10 +186,43 @@ export const getDashboardData = createServerFn({
             case_file_id AS "caseFileId",
             parent_incident_id AS "parentIncidentId",
             report_type AS "reportType"
-          FROM incidents
-          WHERE user_id = $1
-            AND customer_id = $2
-          ORDER BY created_at DESC
+          FROM incidents i
+          WHERE i.customer_id = $2
+            AND (
+              i.user_id = $1
+              OR
+              EXISTS (
+                SELECT 1
+                FROM user_customer_assignments uca
+                WHERE uca.user_id = $1
+                  AND uca.customer_id = i.customer_id
+              )
+              OR EXISTS (
+                SELECT 1
+                FROM user_client_assignments ucla
+                JOIN clients c
+                  ON c.id = ucla.client_id
+                AND c.customer_id = ucla.customer_id
+                WHERE ucla.user_id = $1
+                  AND ucla.customer_id = i.customer_id
+                  AND ucla.client_id = i.client_id
+                  AND c.status = 'active'
+              )
+              OR EXISTS (
+                SELECT 1
+                FROM user_site_assignments usa
+                JOIN sites s
+                  ON s.id = usa.site_id
+                AND s.client_id = usa.client_id
+                AND s.customer_id = usa.customer_id
+                WHERE usa.user_id = $1
+                  AND usa.customer_id = i.customer_id
+                  AND usa.client_id = i.client_id
+                  AND usa.site_id = i.site_id
+                  AND s.status = 'active'
+              )
+            )
+          ORDER BY i.created_at DESC
           LIMIT 100
         `,
         [userId, customer.id],
@@ -485,6 +517,57 @@ export const reviewIncident = createServerFn({
 
       if (!existing) {
         throw new Error('Incident not found')
+      }
+
+      if (authorizedUser.role === 'supervisor') {
+        const access = await client.query(
+          `
+            SELECT 1
+            FROM incidents i
+            WHERE i.id = $1
+              AND i.customer_id = $2
+              AND (
+                EXISTS (
+                  SELECT 1
+                  FROM user_customer_assignments a
+                  WHERE a.user_id = $3
+                    AND a.customer_id = i.customer_id
+                )
+                OR EXISTS (
+                  SELECT 1
+                  FROM user_client_assignments a
+                  JOIN clients c
+                    ON c.id = a.client_id
+                  AND c.customer_id = a.customer_id
+                  WHERE a.user_id = $3
+                    AND a.customer_id = i.customer_id
+                    AND a.client_id = i.client_id
+                    AND c.status = 'active'
+                )
+                OR EXISTS (
+                  SELECT 1
+                  FROM user_site_assignments a
+                  JOIN sites s
+                    ON s.id = a.site_id
+                  AND s.client_id = a.client_id
+                  AND s.customer_id = a.customer_id
+                  WHERE a.user_id = $3
+                    AND a.customer_id = i.customer_id
+                    AND a.client_id = i.client_id
+                    AND a.site_id = i.site_id
+                    AND s.status = 'active'
+                )
+              )
+            LIMIT 1
+          `,
+          [data.incidentId, customer.id, authorizedUser.id],
+        )
+
+        if (access.rows.length === 0) {
+          throw new Error(
+            'You are not authorized to review this incident',
+          )
+        }
       }
 
       if (existing.approval_status !== 'Pending') {
@@ -1181,6 +1264,85 @@ export const saveIncident = createServerFn({
       let clientId: string | null = null
       let siteId: string | null = null
       let caseFileId: string | null = null
+      
+      if (!isSupplemental) {
+        const assignments = await client.query<{
+          clientId: string
+          siteId: string | null
+        }>(
+          `
+            SELECT DISTINCT
+              c.id AS "clientId",
+              s.id AS "siteId"
+            FROM clients c
+            LEFT JOIN sites s
+              ON s.client_id = c.id
+            AND s.customer_id = c.customer_id
+            AND s.status = 'active'
+            WHERE c.customer_id = $1
+              AND c.status = 'active'
+              AND (
+                EXISTS (
+                  SELECT 1
+                  FROM user_customer_assignments a
+                  WHERE a.user_id = $2
+                    AND a.customer_id = c.customer_id
+                )
+                OR EXISTS (
+                  SELECT 1
+                  FROM user_client_assignments a
+                  WHERE a.user_id = $2
+                    AND a.customer_id = c.customer_id
+                    AND a.client_id = c.id
+                )
+                OR (
+                  s.id IS NOT NULL
+                  AND EXISTS (
+                    SELECT 1
+                    FROM user_site_assignments a
+                    WHERE a.user_id = $2
+                      AND a.customer_id = c.customer_id
+                      AND a.client_id = c.id
+                      AND a.site_id = s.id
+                  )
+                )
+              )
+              AND (
+                EXISTS (
+                  SELECT 1
+                  FROM user_customer_assignments a
+                  WHERE a.user_id = $2
+                    AND a.customer_id = c.customer_id
+                )
+                OR EXISTS (
+                  SELECT 1
+                  FROM user_client_assignments a
+                  WHERE a.user_id = $2
+                    AND a.customer_id = c.customer_id
+                    AND a.client_id = c.id
+                )
+                OR s.id IS NOT NULL
+              )
+            ORDER BY "clientId", "siteId"
+          `,
+          [customer.id, authorizedUser.id],
+        )
+
+        if (assignments.rows.length === 0) {
+          throw new Error(
+            'No authorized client or site is available for this report',
+          )
+        }
+
+        if (assignments.rows.length > 1) {
+          throw new Error(
+            'Multiple authorized locations are available. Client and site selection is required.',
+          )
+        }
+
+        clientId = assignments.rows[0].clientId
+        siteId = assignments.rows[0].siteId
+      }
 
       if (isSupplemental) {
         // Resolve the original incident even if the user
