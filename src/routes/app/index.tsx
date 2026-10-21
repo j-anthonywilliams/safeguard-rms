@@ -7,6 +7,7 @@ import {
 } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { authClient } from '@/lib/auth-client'
+import { getOrganizationStructure } from '@/lib/organization.functions'
 import {
   createAttendanceLog,
   createCaseFile,
@@ -58,6 +59,8 @@ interface Incident {
   caseFileId?: string | null
   parentIncidentId?: string | null
   reportType?: string
+  clientId?: string | null
+  siteId?: string | null
 }
 interface CaseFile { id: string; userId: string; caseNumber: string; title: string; status: string; leadOfficer?: string | null; createdAt: string; updatedAt: string }
 interface Equipment { id: string; name: string; serialNumber: string; status: string; assignedTo?: string; updatedAt: string }
@@ -1234,7 +1237,34 @@ function Panel({
     narrative: initialIncident.narrative,
     violentFlag: Number(initialIncident.violentFlag) ? '1' : '', banBarFlag: Number(initialIncident.banBarFlag) ? '1' : '',
     assignedTo: initialIncident.userId, caseFileId: initialIncident.caseFileId || '',
+    clientId: initialIncident.clientId || '', siteId: initialIncident.siteId || '',
   } as Record<string, string> : { assignedTo: userId })
+  const [organization, setOrganization] = useState<{
+    clients: { id: string; name: string; status: string }[]
+    sites: { id: string; clientId: string; name: string; status: string }[]
+  }>({ clients: [], sites: [] })
+
+  useEffect(() => {
+    if (type !== 'incident') return
+    let active = true
+    getOrganizationStructure().then(result => {
+      if (!active) return
+      const clients = result.clients.filter(item => item.status === 'active')
+      const sites = result.sites.filter(item => item.status === 'active')
+      setOrganization({ clients, sites })
+      if (!initialIncident) {
+        const defaultClient = clients.length === 1 ? clients[0].id : ''
+        const matchingSites = sites.filter(item => item.clientId === defaultClient)
+        setForm(previous => ({
+          ...previous,
+          clientId: defaultClient,
+          siteId: matchingSites.length === 1 ? matchingSites[0].id : '',
+        }))
+      }
+    }).catch(() => toast.error('Could not load authorized clients and sites'))
+    return () => { active = false }
+  }, [type, initialIncident])
+
   const [caseTitle, setCaseTitle] = useState('')
   const [caseNumber, setCaseNumber] = useState('')
   const [codeDispositions, setCodeDispositions] = useState<CodeDisposition[]>(() => initialIncident ? parseCodeDispositions(initialIncident) : [{ code: '', disposition: '' }])
@@ -1483,6 +1513,8 @@ const field = (
                 initialIncident?.createdAt || now,
               caseFileId:
                 form.caseFileId || null,
+              clientId: form.clientId || null,
+              siteId: form.siteId || null,
               parentIncidentId:
                 initialIncident?.parentIncidentId || null,
               reportType:
@@ -1669,6 +1701,41 @@ const field = (
                   '',
                   'date'
                 )}
+              </div>
+
+              <div className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
+                <label className="text-sm font-medium">
+                  Client (optional)
+                  <select
+                    className="mt-2 w-full rounded-md border border-input bg-background p-2"
+                    value={form.clientId || ''}
+                    disabled={Boolean(initialIncident?.parentIncidentId)}
+                    onChange={event => setForm(previous => ({
+                      ...previous, clientId: event.target.value, siteId: '',
+                    }))}
+                  >
+                    <option value="">Not assigned</option>
+                    {organization.clients.map(item => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-sm font-medium">
+                  Site (optional)
+                  <select
+                    className="mt-2 w-full rounded-md border border-input bg-background p-2"
+                    value={form.siteId || ''}
+                    disabled={!form.clientId || Boolean(initialIncident?.parentIncidentId)}
+                    onChange={event => setForm(previous => ({
+                      ...previous, siteId: event.target.value,
+                    }))}
+                  >
+                    <option value="">Not assigned</option>
+                    {organization.sites.filter(item => item.clientId === form.clientId).map(item => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                </label>
               </div>
 
               {/* Incident location */}

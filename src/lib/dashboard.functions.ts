@@ -39,6 +39,8 @@ export interface DashboardIncident {
   caseFileId: string | null
   parentIncidentId: string | null
   reportType: string
+  clientId: string | null
+  siteId: string | null
 }
 
 export interface DashboardCaseFile {
@@ -149,7 +151,9 @@ export const getDashboardData = createServerFn({
           created_at AS "createdAt",
           case_file_id AS "caseFileId",
           parent_incident_id AS "parentIncidentId",
-          report_type AS "reportType"
+          report_type AS "reportType",
+            client_id AS "clientId",
+            site_id AS "siteId"
                 FROM incidents
                 WHERE customer_id = $1
                 ORDER BY created_at DESC
@@ -185,7 +189,9 @@ export const getDashboardData = createServerFn({
             created_at AS "createdAt",
             case_file_id AS "caseFileId",
             parent_incident_id AS "parentIncidentId",
-            report_type AS "reportType"
+            report_type AS "reportType",
+            client_id AS "clientId",
+            site_id AS "siteId"
           FROM incidents i
           WHERE i.customer_id = $2
             AND (
@@ -650,7 +656,9 @@ export const reviewIncident = createServerFn({
             created_at AS "createdAt",
             case_file_id AS "caseFileId",
             parent_incident_id AS "parentIncidentId",
-            report_type AS "reportType"
+            report_type AS "reportType",
+            client_id AS "clientId",
+            site_id AS "siteId"
         `,
         [
           data.decision,
@@ -1109,6 +1117,8 @@ export const saveIncident = createServerFn({
       caseFileId: string | null
       parentIncidentId: string | null
       reportType: string
+      clientId: string | null
+      siteId: string | null
     }) => data,
   )
   .handler(async ({ data }) => {
@@ -1127,6 +1137,85 @@ export const saveIncident = createServerFn({
     try {
       await client.query('BEGIN')
 
+      let clientId: string | null = null
+      let siteId: string | null = null
+
+      // Optional location selection. Never infer a location on the server:
+      // an explicit "Not assigned" selection must remain null.
+      if (!data.parentIncidentId) {
+        clientId = data.clientId || null
+        siteId = data.siteId || null
+
+        if (siteId && !clientId) {
+          throw new Error('Select a client before selecting a site')
+        }
+
+        if (clientId) {
+          const authorizedClient = await client.query(
+            `
+              SELECT 1 FROM clients c
+              WHERE c.id = $1 AND c.customer_id = $2
+                AND c.status = 'active'
+                AND (
+                  EXISTS (
+                    SELECT 1 FROM user_customer_assignments a
+                    WHERE a.user_id = $3 AND a.customer_id = c.customer_id
+                  )
+                  OR EXISTS (
+                    SELECT 1 FROM user_client_assignments a
+                    WHERE a.user_id = $3 AND a.customer_id = c.customer_id
+                      AND a.client_id = c.id
+                  )
+                  OR EXISTS (
+                    SELECT 1 FROM user_site_assignments a
+                    WHERE a.user_id = $3 AND a.customer_id = c.customer_id
+                      AND a.client_id = c.id
+                  )
+                )
+              LIMIT 1
+            `,
+            [clientId, customer.id, authorizedUser.id],
+          )
+          if (authorizedClient.rowCount !== 1) {
+            throw new Error('Client is not authorized or active')
+          }
+        }
+
+        if (siteId) {
+          const authorizedSite = await client.query(
+            `
+              SELECT 1 FROM sites s
+              JOIN clients c ON c.id = s.client_id
+                AND c.customer_id = s.customer_id
+              WHERE s.id = $1 AND s.client_id = $2
+                AND s.customer_id = $3 AND s.status = 'active'
+                AND c.status = 'active'
+                AND (
+                  EXISTS (
+                    SELECT 1 FROM user_customer_assignments a
+                    WHERE a.user_id = $4 AND a.customer_id = s.customer_id
+                  )
+                  OR EXISTS (
+                    SELECT 1 FROM user_client_assignments a
+                    WHERE a.user_id = $4 AND a.customer_id = s.customer_id
+                      AND a.client_id = s.client_id
+                  )
+                  OR EXISTS (
+                    SELECT 1 FROM user_site_assignments a
+                    WHERE a.user_id = $4 AND a.customer_id = s.customer_id
+                      AND a.client_id = s.client_id AND a.site_id = s.id
+                  )
+                )
+              LIMIT 1
+            `,
+            [siteId, clientId, customer.id, authorizedUser.id],
+          )
+          if (authorizedSite.rowCount !== 1) {
+            throw new Error('Site is not authorized or active')
+          }
+        }
+      }
+
       // --------------------------------------------------
       // EDIT EXISTING INCIDENT
       // --------------------------------------------------
@@ -1136,12 +1225,16 @@ export const saveIncident = createServerFn({
           id: string
           user_id: string
           approval_status: string
+          client_id: string | null
+          site_id: string | null
         }>(
           `
             SELECT
               id,
               user_id,
-              approval_status
+              approval_status,
+              client_id,
+              site_id
             FROM incidents
             WHERE id = $1
               AND customer_id = $2
@@ -1163,6 +1256,11 @@ export const saveIncident = createServerFn({
           throw new Error(
             'You cannot edit another officer’s report',
           )
+        }
+
+        if (data.parentIncidentId) {
+          clientId = existing.client_id
+          siteId = existing.site_id
         }
 
         if (existing.approval_status === 'Approved') {
@@ -1191,7 +1289,9 @@ export const saveIncident = createServerFn({
               approval_status = 'Pending',
               review_feedback = NULL,
               reviewed_by = NULL,
-              reviewed_at = NULL
+              reviewed_at = NULL,
+              client_id = $16,
+              site_id = $17
             WHERE id = $14
               AND customer_id = $15
             RETURNING
@@ -1220,7 +1320,9 @@ export const saveIncident = createServerFn({
               created_at AS "createdAt",
               case_file_id AS "caseFileId",
               parent_incident_id AS "parentIncidentId",
-              report_type AS "reportType"
+              report_type AS "reportType",
+            client_id AS "clientId",
+            site_id AS "siteId"
           `,
           [
             data.incidentDate,
@@ -1238,6 +1340,8 @@ export const saveIncident = createServerFn({
             data.narrative,
             data.id,
             customer.id,
+            clientId,
+            siteId,
           ],
         )
 
@@ -1261,89 +1365,8 @@ export const saveIncident = createServerFn({
       let reportNumber: string
       let parentIncidentId: string | null = null
 
-      let clientId: string | null = null
-      let siteId: string | null = null
       let caseFileId: string | null = null
       
-      if (!isSupplemental) {
-        const assignments = await client.query<{
-          clientId: string
-          siteId: string | null
-        }>(
-          `
-            SELECT DISTINCT
-              c.id AS "clientId",
-              s.id AS "siteId"
-            FROM clients c
-            LEFT JOIN sites s
-              ON s.client_id = c.id
-            AND s.customer_id = c.customer_id
-            AND s.status = 'active'
-            WHERE c.customer_id = $1
-              AND c.status = 'active'
-              AND (
-                EXISTS (
-                  SELECT 1
-                  FROM user_customer_assignments a
-                  WHERE a.user_id = $2
-                    AND a.customer_id = c.customer_id
-                )
-                OR EXISTS (
-                  SELECT 1
-                  FROM user_client_assignments a
-                  WHERE a.user_id = $2
-                    AND a.customer_id = c.customer_id
-                    AND a.client_id = c.id
-                )
-                OR (
-                  s.id IS NOT NULL
-                  AND EXISTS (
-                    SELECT 1
-                    FROM user_site_assignments a
-                    WHERE a.user_id = $2
-                      AND a.customer_id = c.customer_id
-                      AND a.client_id = c.id
-                      AND a.site_id = s.id
-                  )
-                )
-              )
-              AND (
-                EXISTS (
-                  SELECT 1
-                  FROM user_customer_assignments a
-                  WHERE a.user_id = $2
-                    AND a.customer_id = c.customer_id
-                )
-                OR EXISTS (
-                  SELECT 1
-                  FROM user_client_assignments a
-                  WHERE a.user_id = $2
-                    AND a.customer_id = c.customer_id
-                    AND a.client_id = c.id
-                )
-                OR s.id IS NOT NULL
-              )
-            ORDER BY "clientId", "siteId"
-          `,
-          [customer.id, authorizedUser.id],
-        )
-
-        if (assignments.rows.length === 0) {
-          throw new Error(
-            'No authorized client or site is available for this report',
-          )
-        }
-
-        if (assignments.rows.length > 1) {
-          throw new Error(
-            'Multiple authorized locations are available. Client and site selection is required.',
-          )
-        }
-
-        clientId = assignments.rows[0].clientId
-        siteId = assignments.rows[0].siteId
-      }
-
       if (isSupplemental) {
         // Resolve the original incident even if the user
         // selected an existing supplemental.
@@ -1500,7 +1523,9 @@ export const saveIncident = createServerFn({
             created_at AS "createdAt",
             case_file_id AS "caseFileId",
             parent_incident_id AS "parentIncidentId",
-            report_type AS "reportType"
+            report_type AS "reportType",
+            client_id AS "clientId",
+            site_id AS "siteId"
         `,
         [
           crypto.randomUUID(),
