@@ -4,6 +4,8 @@ import { genericOAuth } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { Pool } from 'pg'
 import { getRequestHeaders } from '@tanstack/start-server-core'
+import { APIError, createAuthMiddleware } from 'better-auth/api'
+import { getCustomerAuthPolicy } from './customer-auth-policy.server'
 
 let pool: Pool | undefined
 let authInstance: ReturnType<typeof createAuth> | undefined
@@ -94,6 +96,122 @@ function createAuth() {
             },
           }
         : {},
+
+      hooks: {
+        before: createAuthMiddleware(async ctx => {
+          const path = ctx.path
+            
+          const emailPasswordPaths = [
+            '/sign-in/email',
+            '/sign-up/email',
+          ]
+
+          const socialSignInPath = '/sign-in/social'
+
+          const oauthCallbackPath = '/callback/:id'
+
+          const requiresPolicy =
+            emailPasswordPaths.includes(path) ||
+            path === socialSignInPath ||
+            path === oauthCallbackPath
+
+          if (!requiresPolicy) {
+            return
+          }
+
+          // Fail closed if the customer policy cannot be retrieved.
+          let policy
+
+          try {
+            policy = await getCustomerAuthPolicy()
+          } catch {
+            throw new APIError('FORBIDDEN', {
+              message: 'Customer authentication policy unavailable',
+            })
+          }
+
+          if (
+            emailPasswordPaths.includes(path) &&
+            !policy.emailPasswordEnabled
+          ) {
+            throw new APIError('FORBIDDEN', {
+              message: 'Email/password authentication is disabled',
+            })
+          }
+
+          if (path === socialSignInPath) {
+            const body = ctx.body as {
+              provider?: string
+            } | undefined
+
+            const provider = body?.provider
+
+            if (
+              provider === 'google' &&
+              !policy.googleEnabled
+            ) {
+              throw new APIError('FORBIDDEN', {
+                message: 'Google authentication is disabled',
+              })
+            }
+
+            if (
+              provider === 'safeguard-platform' &&
+              !policy.platformSsoEnabled
+            ) {
+              throw new APIError('FORBIDDEN', {
+                message: 'SafeGuard-RMS SSO is disabled',
+              })
+            }
+
+            // Deny unknown providers rather than accidentally
+            // allowing an unconfigured authentication method.
+            if (
+              provider !== 'google' &&
+              provider !== 'safeguard-platform'
+            ) {
+              throw new APIError('FORBIDDEN', {
+                message: 'Authentication provider is not enabled',
+              })
+            }
+          }
+
+          if (path === oauthCallbackPath) {
+            const callbackUrl = new URL(ctx.request!.url)
+
+            const pathSegments = callbackUrl.pathname
+              .split('/')
+              .filter(Boolean)
+
+            const provider = pathSegments[pathSegments.length - 1]
+
+            if (provider === 'google' && !policy.googleEnabled) {
+              throw new APIError('FORBIDDEN', {
+                message: 'Google authentication is disabled',
+              })
+            }
+
+            if (
+              provider === 'safeguard-platform' &&
+              !policy.platformSsoEnabled
+            ) {
+              throw new APIError('FORBIDDEN', {
+                message: 'SafeGuard-RMS SSO is disabled',
+              })
+            }
+
+            if (
+              provider !== 'google' &&
+              provider !== 'safeguard-platform'
+            ) {
+              throw new APIError('FORBIDDEN', {
+                message: 'Authentication provider is not enabled',
+              })
+            }
+          }
+         
+        }),
+      },
 
     plugins: [
       ...(oidcEnabled &&
