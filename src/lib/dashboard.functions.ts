@@ -1397,7 +1397,6 @@ export const saveIncident = createServerFn({
 
         // The original incident is authoritative for
         // organizational and case-file associations.
-
         const originalResult = await client.query<{
           id: string
           client_id: string | null
@@ -1418,12 +1417,64 @@ export const saveIncident = createServerFn({
           `,
           [parentIncidentId, customer.id],
         )
-
         const original = originalResult.rows[0]
 
-        if (!original) {
-          throw new Error('Original incident not found')
-        }
+          if (!original) {
+            throw new Error('Original incident not found')
+          }
+
+          const parentAccess = await client.query(
+            `
+              SELECT 1
+              FROM incidents i
+              WHERE i.id = $1
+                AND i.customer_id = $2
+                AND (
+                  i.user_id = $3
+                  OR $4 = 'backend'
+                  OR EXISTS (
+                    SELECT 1
+                    FROM user_customer_assignments a
+                    WHERE a.user_id = $3
+                      AND a.customer_id = i.customer_id
+                  )
+                  OR EXISTS (
+                    SELECT 1
+                    FROM user_client_assignments a
+                    JOIN clients c ON c.id = a.client_id
+                    WHERE a.user_id = $3
+                      AND a.customer_id = i.customer_id
+                      AND a.client_id = i.client_id
+                      AND c.customer_id = i.customer_id
+                      AND c.status = 'active'
+                  )
+                  OR EXISTS (
+                    SELECT 1
+                    FROM user_site_assignments a
+                    JOIN sites s ON s.id = a.site_id
+                    WHERE a.user_id = $3
+                      AND a.customer_id = i.customer_id
+                      AND a.client_id = i.client_id
+                      AND a.site_id = i.site_id
+                      AND s.customer_id = i.customer_id
+                      AND s.status = 'active'
+                  )
+                )
+              LIMIT 1
+            `,
+            [
+              original.id,
+              customer.id,
+              authorizedUser.id,
+              authorizedUser.role,
+            ],
+          )
+
+          if (parentAccess.rows.length === 0) {
+            throw new Error(
+              'You are not authorized to create a supplemental report for this incident',
+            )
+          }
 
         clientId = original.client_id
         siteId = original.site_id
