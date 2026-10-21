@@ -45,11 +45,18 @@ export async function getPlatformRole(
   return result.rows[0]?.platform_role ?? null
 }
 
+/**
+ * Customer directory visibility.
+ *
+ * Backend and Support may see all active customers.
+ * Other users see only customers with active membership.
+ *
+ * Directory visibility does not grant operational access.
+ */
 export async function getCustomerMemberships(
   userId: string,
 ): Promise<CustomerMembership[]> {
   const db = getPlatformDb()
-
   const platformRole = await getPlatformRole(userId)
 
   const result = await db.query<{
@@ -87,15 +94,49 @@ export async function getCustomerMemberships(
   }))
 }
 
+/**
+ * Operational customer access.
+ *
+ * Requires an explicit active membership.
+ * Platform roles alone never grant operational access.
+ */
 export async function requireCustomerAccess(
   userId: string,
   customerId: string,
 ): Promise<CustomerMembership> {
-  const memberships = await getCustomerMemberships(userId)
+  if (!userId || !customerId) {
+    throw new Error('Customer access denied')
+  }
 
-  const membership = memberships.find(
-    item => item.customerId === customerId,
+  const db = getPlatformDb()
+
+  const result = await db.query<{
+    customerId: string
+    customerCode: string
+    customerName: string
+    customerRole: CustomerRole
+    websiteSlug: string
+  }>(
+    `
+      SELECT
+        c.id AS "customerId",
+        c.customer_code AS "customerCode",
+        c.name AS "customerName",
+        m.customer_role AS "customerRole",
+        c.website_slug AS "websiteSlug"
+      FROM platform_customer_memberships m
+      JOIN platform_customers c
+        ON c.id = m.customer_id
+      WHERE m.user_id = $1
+        AND m.customer_id = $2
+        AND m.status = 'active'
+        AND c.status = 'active'
+      LIMIT 1
+    `,
+    [userId, customerId],
   )
+
+  const membership = result.rows[0]
 
   if (!membership) {
     throw new Error(
@@ -103,16 +144,19 @@ export async function requireCustomerAccess(
     )
   }
 
-  return membership
+  const platformRole = await getPlatformRole(userId)
+
+  return {
+    ...membership,
+    platformRole,
+  }
 }
 
-
 /**
- * Returns the customer memberships associated with
- * the currently authenticated platform user.
+ * Returns customers visible to the authenticated
+ * platform user.
  *
- * The user ID is obtained from the verified
- * Better Auth session, never from browser input.
+ * This is directory visibility, not operational access.
  */
 export async function getAuthenticatedCustomerMemberships():
   Promise<CustomerMembership[]> {
@@ -122,8 +166,7 @@ export async function getAuthenticatedCustomerMemberships():
 }
 
 /**
- * Verifies that the currently authenticated platform
- * user has access to the requested customer.
+ * Requires authenticated, active customer membership.
  */
 export async function requireAuthenticatedCustomerAccess(
   customerId: string,
