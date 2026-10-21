@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as PlatformLoginRouteImport } from './routes/platform-login'
+import { Route as PlatformCustomersRouteImport } from './routes/platform-customers'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
@@ -24,6 +25,11 @@ import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 const PlatformLoginRoute = PlatformLoginRouteImport.update({
   id: '/platform-login',
   path: '/platform-login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlatformCustomersRoute = PlatformCustomersRouteImport.update({
+  id: '/platform-customers',
+  path: '/platform-customers',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -80,6 +86,7 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/platform-customers': typeof PlatformCustomersRoute
   '/platform-login': typeof PlatformLoginRoute
   '/api/test': typeof ApiTestRoute
   '/app/organization': typeof AppOrganizationRoute
@@ -92,6 +99,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/platform-customers': typeof PlatformCustomersRoute
   '/platform-login': typeof PlatformLoginRoute
   '/api/test': typeof ApiTestRoute
   '/app/organization': typeof AppOrganizationRoute
@@ -106,6 +114,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/platform-customers': typeof PlatformCustomersRoute
   '/platform-login': typeof PlatformLoginRoute
   '/api/test': typeof ApiTestRoute
   '/app/organization': typeof AppOrganizationRoute
@@ -121,6 +130,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/app'
+    | '/platform-customers'
     | '/platform-login'
     | '/api/test'
     | '/app/organization'
@@ -133,6 +143,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/platform-customers'
     | '/platform-login'
     | '/api/test'
     | '/app/organization'
@@ -146,6 +157,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/app'
+    | '/platform-customers'
     | '/platform-login'
     | '/api/test'
     | '/app/organization'
@@ -160,6 +172,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  PlatformCustomersRoute: typeof PlatformCustomersRoute
   PlatformLoginRoute: typeof PlatformLoginRoute
   ApiTestRoute: typeof ApiTestRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -173,6 +186,13 @@ declare module '@tanstack/react-router' {
       path: '/platform-login'
       fullPath: '/platform-login'
       preLoaderRoute: typeof PlatformLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/platform-customers': {
+      id: '/platform-customers'
+      path: '/platform-customers'
+      fullPath: '/platform-customers'
+      preLoaderRoute: typeof PlatformCustomersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app': {
@@ -269,6 +289,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  PlatformCustomersRoute: PlatformCustomersRoute,
   PlatformLoginRoute: PlatformLoginRoute,
   ApiTestRoute: ApiTestRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
