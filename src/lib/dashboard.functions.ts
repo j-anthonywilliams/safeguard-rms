@@ -832,6 +832,67 @@ async function validateOperationalAssignment(
   if (!result.rows.length) throw new Error('Client or site is not authorized or active')
 }
 
+// Link or unlink an existing original report and all its supplemental reports.
+// Report content, approval status and report numbers are not modified.
+export const assignIncidentToCaseFile = createServerFn({ method: 'POST' })
+  .inputValidator((data: { incidentId: string; caseFileId: string | null }) => data)
+  .handler(async ({ data }) => {
+    const user = await requireRole(['user', 'supervisor', 'admin', 'backend'])
+    const customer = await getCustomerContext()
+    const db = getDb()
+    const connection = await db.connect()
+    try {
+      await connection.query('BEGIN')
+      const incidentResult = await connection.query<{
+        id: string; user_id: string; parent_incident_id: string | null;
+        client_id: string | null; site_id: string | null
+      }>(`SELECT id, user_id, parent_incident_id, client_id, site_id
+          FROM incidents WHERE id = $1 AND customer_id = $2 FOR UPDATE`,
+        [data.incidentId, customer.id])
+      const selected = incidentResult.rows[0]
+      if (!selected) throw new Error('Incident not found')
+      const originalId = selected.parent_incident_id || selected.id
+      const originalResult = await connection.query<{
+        id: string; user_id: string; client_id: string | null; site_id: string | null
+      }>(`SELECT id, user_id, client_id, site_id FROM incidents
+          WHERE id = $1 AND customer_id = $2 AND parent_incident_id IS NULL FOR UPDATE`,
+        [originalId, customer.id])
+      const original = originalResult.rows[0]
+      if (!original) throw new Error('Original incident not found')
+      const permitted = user.role === 'admin' || user.role === 'backend' || original.user_id === user.id
+      if (!permitted) {
+        const scope = await connection.query(`SELECT 1 WHERE
+          EXISTS (SELECT 1 FROM user_customer_assignments a WHERE a.user_id = $1 AND a.customer_id = $2)
+          OR EXISTS (SELECT 1 FROM user_client_assignments a JOIN clients c
+            ON c.id = a.client_id AND c.customer_id = a.customer_id AND c.status = 'active'
+            WHERE a.user_id = $1 AND a.customer_id = $2 AND a.client_id = $3)
+          OR EXISTS (SELECT 1 FROM user_site_assignments a JOIN sites s
+            ON s.id = a.site_id AND s.customer_id = a.customer_id AND s.client_id = a.client_id AND s.status = 'active'
+            WHERE a.user_id = $1 AND a.customer_id = $2 AND a.client_id = $3 AND a.site_id = $4)`,
+          [user.id, customer.id, original.client_id, original.site_id])
+        if (user.role !== 'supervisor' || !scope.rowCount) throw new Error('Not authorized to associate this report')
+      }
+      if (data.caseFileId) {
+        const caseResult = await connection.query<{ id: string; client_id: string | null; site_id: string | null }>(
+          `SELECT id, client_id, site_id FROM case_files WHERE id = $1 AND customer_id = $2 AND LOWER(status) NOT IN ('archived', 'closed') FOR UPDATE`,
+          [data.caseFileId, customer.id])
+        const caseFile = caseResult.rows[0]
+        if (!caseFile) throw new Error('Active case file not found')
+        await validateOperationalAssignment(db, customer.id, user.id, user.role, caseFile.client_id, caseFile.site_id)
+        if (caseFile.client_id && original.client_id !== caseFile.client_id) throw new Error('Case file and report must belong to the same client')
+        if (caseFile.site_id && original.site_id !== caseFile.site_id) throw new Error('Case file and report must belong to the same site')
+      }
+      await connection.query(`UPDATE incidents SET case_file_id = $1
+        WHERE customer_id = $2 AND (id = $3 OR parent_incident_id = $3)`,
+        [data.caseFileId || null, customer.id, originalId])
+      await connection.query('COMMIT')
+      return { incidentId: originalId, caseFileId: data.caseFileId || null }
+    } catch (error) {
+      await connection.query('ROLLBACK')
+      throw error
+    } finally { connection.release() }
+  })
+
 export const createCaseFile = createServerFn({
   method: 'POST',
 })
@@ -1465,7 +1526,21 @@ export const saveIncident = createServerFn({
       let parentIncidentId: string | null = null
 
       let caseFileId: string | null = null
-      
+
+      if (!isSupplemental && data.caseFileId) {
+        const chosenCase = await client.query<{ client_id: string | null; site_id: string | null }>(
+          `SELECT client_id, site_id FROM case_files
+           WHERE id = $1 AND customer_id = $2 AND LOWER(status) NOT IN ('closed', 'archived')`,
+          [data.caseFileId, customer.id],
+        )
+        const target = chosenCase.rows[0]
+        if (!target) throw new Error('Active case file not found')
+        await validateOperationalAssignment(db, customer.id, authorizedUser.id, authorizedUser.role, target.client_id, target.site_id)
+        if (target.client_id && target.client_id !== clientId) throw new Error('Case file client does not match report client')
+        if (target.site_id && target.site_id !== siteId) throw new Error('Case file site does not match report site')
+        caseFileId = data.caseFileId
+      }
+
       if (isSupplemental) {
         // Resolve the original incident even if the user
         // selected an existing supplemental.

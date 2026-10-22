@@ -9,6 +9,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { authClient } from '@/lib/auth-client'
 import { getOrganizationStructure } from '@/lib/organization.functions'
 import {
+  assignIncidentToCaseFile,
   createAttendanceLog,
   createCaseFile,
   createEvidence,
@@ -164,6 +165,8 @@ function DashboardHome() {
     : null
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [caseFiles, setCaseFiles] = useState<CaseFile[]>([])
+  const [caseSelections, setCaseSelections] = useState<Record<string, string>>({})
+  const [caseLinkBusy, setCaseLinkBusy] = useState<string | null>(null)
   const [equipment, setEquipment] = useState<Equipment[]>([])
   const [evidence, setEvidence] = useState<Evidence[]>([])
   const [events, setEvents] = useState<CustodyEvent[]>([])
@@ -814,14 +817,48 @@ return (
                     </p>
                   </div>
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setActivePanel('incident')}
-                    disabled={!canCreateRecords(accessLevel)}
-                  >
-                    Add report
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      className="max-w-48 rounded-md border border-input bg-background p-2 text-xs"
+                      aria-label={`Select existing report for ${file.caseNumber}`}
+                      value={caseSelections[file.id] || ''}
+                      onChange={event => setCaseSelections(prev => ({ ...prev, [file.id]: event.target.value }))}
+                    >
+                      <option value="">Select existing report</option>
+                      {incidents.filter(item => !item.parentIncidentId && item.caseFileId !== file.id).map(item => (
+                        <option key={item.id} value={item.id}>{item.reportNumber}</option>
+                      ))}
+                    </select>
+                    <Button variant="outline" size="sm"
+                      disabled={!caseSelections[file.id] || caseLinkBusy !== null || !canCreateRecords(accessLevel)}
+                      onClick={async () => {
+                        setCaseLinkBusy(file.id)
+                        try {
+                          await assignIncidentToCaseFile({ data: { incidentId: caseSelections[file.id], caseFileId: file.id } })
+                          toast.success('Report linked to case file')
+                          window.location.reload()
+                        } catch (error) {
+                          toast.error(error instanceof Error ? error.message : 'Unable to link report')
+                        } finally { setCaseLinkBusy(null) }
+                      }}
+                    >Link report</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setActivePanel('incident')}
+                      disabled={!canCreateRecords(accessLevel)}>New report</Button>
+                    {incidents.filter(item => !item.parentIncidentId && item.caseFileId === file.id).map(item => (
+                      <Button key={item.id} variant="ghost" size="sm" disabled={caseLinkBusy !== null || !canCreateRecords(accessLevel)}
+                        onClick={async () => {
+                          setCaseLinkBusy(file.id)
+                          try {
+                            await assignIncidentToCaseFile({ data: { incidentId: item.id, caseFileId: null } })
+                            toast.success('Report removed from case file')
+                            window.location.reload()
+                          } catch (error) {
+                            toast.error(error instanceof Error ? error.message : 'Unable to unlink report')
+                          } finally { setCaseLinkBusy(null) }
+                        }}
+                      >Remove {item.reportNumber}</Button>
+                    ))}
+                  </div>
                 </div>
               ))
             ) : (
@@ -1058,6 +1095,7 @@ return (
     userId={recordUserId}
     accessLevel={accessLevel}
     directoryUsers={directoryUsers}
+    caseFiles={caseFiles}
     initialIncident={editingIncident}
     onClose={() => {
       setActivePanel(null)
@@ -1168,6 +1206,7 @@ function Panel({
   userId,
   accessLevel,
   directoryUsers,
+  caseFiles,
   initialIncident,
   onClose,
   onSaved,
@@ -1180,6 +1219,7 @@ function Panel({
     email: string
     displayName?: string | null
   }[]
+  caseFiles: CaseFile[]
   initialIncident?: Incident | null
   onClose: () => void
   onSaved: () => void
@@ -1730,6 +1770,19 @@ const field = (
                   </select>
                 </label>
               </div>
+
+              <label className="space-y-1.5 sm:col-span-2">
+                <span className="text-xs font-medium">Case File (optional)</span>
+                <select className="w-full rounded-md border border-input bg-background p-2 text-sm"
+                  value={form.caseFileId || ''}
+                  disabled={Boolean(initialIncident?.parentIncidentId)}
+                  onChange={event => setForm(previous => ({ ...previous, caseFileId: event.target.value }))}>
+                  <option value="">Not assigned</option>
+                  {caseFiles.filter(file => !['closed','archived'].includes(file.status.toLowerCase())).map(file => (
+                    <option key={file.id} value={file.id}>{file.caseNumber} · {file.title}</option>
+                  ))}
+                </select>
+              </label>
 
               {/* Incident location */}
               {field('Location', 'location', '123 Main St / sector 4')}
