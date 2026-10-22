@@ -159,7 +159,7 @@ export const getDashboardData = createServerFn({
                 ORDER BY created_at DESC
                 LIMIT 100
               `,
-              [customer.id, userId, accessLevel],
+              [customer.id],
             )
     : db.query<DashboardIncident>(
         `
@@ -231,7 +231,7 @@ export const getDashboardData = createServerFn({
           ORDER BY i.created_at DESC
           LIMIT 100
         `,
-        [customer.id, userId],
+        [userId, customer.id],
       )
 
   const [
@@ -257,12 +257,41 @@ export const getDashboardData = createServerFn({
           created_at AS "createdAt",
           updated_at AS "updatedAt"
           FROM case_files
-          WHERE user_id = $1
-            AND customer_id = $2
+          WHERE customer_id = $2
+            AND (
+              user_id = $1
+              OR $3 IN ('admin', 'backend')
+              OR (
+                $3 = 'supervisor'
+                AND (
+                  EXISTS (
+                    SELECT 1
+                    FROM user_customer_assignments a
+                    WHERE a.user_id = $1
+                      AND a.customer_id = $2
+                  )
+                  OR EXISTS (
+                    SELECT 1
+                    FROM user_client_assignments a
+                    WHERE a.user_id = $1
+                      AND a.customer_id = $2
+                      AND a.client_id = case_files.client_id
+                  )
+                  OR EXISTS (
+                    SELECT 1
+                    FROM user_site_assignments a
+                    WHERE a.user_id = $1
+                      AND a.customer_id = $2
+                      AND a.client_id = case_files.client_id
+                      AND a.site_id = case_files.site_id
+                  )
+                )
+              )
+            )
           ORDER BY updated_at DESC
           LIMIT 100
         `,
-        [customer.id, userId],
+        [userId, customer.id, accessLevel],
       ),
 
     db.query<DashboardEquipment>(
@@ -276,12 +305,15 @@ export const getDashboardData = createServerFn({
           assigned_to AS "assignedTo",
           updated_at AS "updatedAt"
         FROM equipment
-        WHERE user_id = $1
-          AND customer_id = $2
+        WHERE customer_id = $2
+          AND (
+            user_id = $1
+            OR $3 IN ('admin', 'backend')
+          )
         ORDER BY updated_at DESC
         LIMIT 8
       `,
-      [customer.id, userId],
+      [userId, customer.id, accessLevel],
     ),
 
     db.query<DashboardEvidence>(
@@ -353,14 +385,24 @@ export const getDashboardData = createServerFn({
     db.query<DashboardDirectoryUser>(
       `
         SELECT
-          id,
-          email,
-          display_name AS "displayName"
-        FROM users
-        WHERE COALESCE(is_archived, 0) = 0
-        ORDER BY created_at ASC
+          u.id,
+          u.email,
+          u.display_name AS "displayName"
+        FROM users u
+        WHERE COALESCE(u.is_archived, 0) = 0
+          AND (
+            u.id = $2
+            OR EXISTS (
+              SELECT 1
+              FROM user_customer_assignments uca
+              WHERE uca.user_id = u.id
+                AND uca.customer_id = $1
+            )
+          )
+        ORDER BY u.created_at ASC
         LIMIT 100
-        `,
+      `,
+      [customer.id, userId],
     ),
   ])
 
