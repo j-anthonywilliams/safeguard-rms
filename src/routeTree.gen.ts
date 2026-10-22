@@ -16,8 +16,10 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppUsersRouteImport } from './routes/app/users'
 import { Route as AppSchedulerRouteImport } from './routes/app/scheduler'
+import { Route as AppPropertyRouteImport } from './routes/app/property'
 import { Route as AppProfileRouteImport } from './routes/app/profile'
 import { Route as AppOrganizationRouteImport } from './routes/app/organization'
+import { Route as AppEvidenceRouteImport } from './routes/app/evidence'
 import { Route as ApiTestRouteImport } from './routes/api/test'
 import { Route as ApiPlatformAuthSplatRouteImport } from './routes/api/platform-auth/$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -57,6 +59,11 @@ const AppSchedulerRoute = AppSchedulerRouteImport.update({
   path: '/scheduler',
   getParentRoute: () => AppRoute,
 } as any)
+const AppPropertyRoute = AppPropertyRouteImport.update({
+  id: '/property',
+  path: '/property',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppProfileRoute = AppProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -65,6 +72,11 @@ const AppProfileRoute = AppProfileRouteImport.update({
 const AppOrganizationRoute = AppOrganizationRouteImport.update({
   id: '/organization',
   path: '/organization',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppEvidenceRoute = AppEvidenceRouteImport.update({
+  id: '/evidence',
+  path: '/evidence',
   getParentRoute: () => AppRoute,
 } as any)
 const ApiTestRoute = ApiTestRouteImport.update({
@@ -89,8 +101,10 @@ export interface FileRoutesByFullPath {
   '/platform-customers': typeof PlatformCustomersRoute
   '/platform-login': typeof PlatformLoginRoute
   '/api/test': typeof ApiTestRoute
+  '/app/evidence': typeof AppEvidenceRoute
   '/app/organization': typeof AppOrganizationRoute
   '/app/profile': typeof AppProfileRoute
+  '/app/property': typeof AppPropertyRoute
   '/app/scheduler': typeof AppSchedulerRoute
   '/app/users': typeof AppUsersRoute
   '/app/': typeof AppIndexRoute
@@ -102,8 +116,10 @@ export interface FileRoutesByTo {
   '/platform-customers': typeof PlatformCustomersRoute
   '/platform-login': typeof PlatformLoginRoute
   '/api/test': typeof ApiTestRoute
+  '/app/evidence': typeof AppEvidenceRoute
   '/app/organization': typeof AppOrganizationRoute
   '/app/profile': typeof AppProfileRoute
+  '/app/property': typeof AppPropertyRoute
   '/app/scheduler': typeof AppSchedulerRoute
   '/app/users': typeof AppUsersRoute
   '/app': typeof AppIndexRoute
@@ -117,8 +133,10 @@ export interface FileRoutesById {
   '/platform-customers': typeof PlatformCustomersRoute
   '/platform-login': typeof PlatformLoginRoute
   '/api/test': typeof ApiTestRoute
+  '/app/evidence': typeof AppEvidenceRoute
   '/app/organization': typeof AppOrganizationRoute
   '/app/profile': typeof AppProfileRoute
+  '/app/property': typeof AppPropertyRoute
   '/app/scheduler': typeof AppSchedulerRoute
   '/app/users': typeof AppUsersRoute
   '/app/': typeof AppIndexRoute
@@ -133,8 +151,10 @@ export interface FileRouteTypes {
     | '/platform-customers'
     | '/platform-login'
     | '/api/test'
+    | '/app/evidence'
     | '/app/organization'
     | '/app/profile'
+    | '/app/property'
     | '/app/scheduler'
     | '/app/users'
     | '/app/'
@@ -146,8 +166,10 @@ export interface FileRouteTypes {
     | '/platform-customers'
     | '/platform-login'
     | '/api/test'
+    | '/app/evidence'
     | '/app/organization'
     | '/app/profile'
+    | '/app/property'
     | '/app/scheduler'
     | '/app/users'
     | '/app'
@@ -160,8 +182,10 @@ export interface FileRouteTypes {
     | '/platform-customers'
     | '/platform-login'
     | '/api/test'
+    | '/app/evidence'
     | '/app/organization'
     | '/app/profile'
+    | '/app/property'
     | '/app/scheduler'
     | '/app/users'
     | '/app/'
@@ -230,6 +254,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSchedulerRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/property': {
+      id: '/app/property'
+      path: '/property'
+      fullPath: '/app/property'
+      preLoaderRoute: typeof AppPropertyRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/profile': {
       id: '/app/profile'
       path: '/profile'
@@ -242,6 +273,13 @@ declare module '@tanstack/react-router' {
       path: '/organization'
       fullPath: '/app/organization'
       preLoaderRoute: typeof AppOrganizationRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/evidence': {
+      id: '/app/evidence'
+      path: '/evidence'
+      fullPath: '/app/evidence'
+      preLoaderRoute: typeof AppEvidenceRouteImport
       parentRoute: typeof AppRoute
     }
     '/api/test': {
@@ -269,16 +307,20 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppEvidenceRoute: typeof AppEvidenceRoute
   AppOrganizationRoute: typeof AppOrganizationRoute
   AppProfileRoute: typeof AppProfileRoute
+  AppPropertyRoute: typeof AppPropertyRoute
   AppSchedulerRoute: typeof AppSchedulerRoute
   AppUsersRoute: typeof AppUsersRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppEvidenceRoute: AppEvidenceRoute,
   AppOrganizationRoute: AppOrganizationRoute,
   AppProfileRoute: AppProfileRoute,
+  AppPropertyRoute: AppPropertyRoute,
   AppSchedulerRoute: AppSchedulerRoute,
   AppUsersRoute: AppUsersRoute,
   AppIndexRoute: AppIndexRoute,

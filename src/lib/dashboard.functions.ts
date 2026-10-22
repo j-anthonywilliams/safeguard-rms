@@ -772,7 +772,12 @@ export const reviewIncident = createServerFn({
 export const getPanelEvidence = createServerFn({
   method: 'GET',
 }).handler(async () => {
-  const authorizedUser = await requireActiveUser()
+  const authorizedUser = await requireRole([
+    'user',
+    'supervisor',
+    'admin',
+    'backend',
+  ])
   const customer = await getCustomerContext()
   const db = getDb()
 

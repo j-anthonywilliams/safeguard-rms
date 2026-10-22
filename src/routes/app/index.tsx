@@ -774,21 +774,9 @@ return (
           </ActionCard>
         </div>
 
-        <div id="evidence" className="scroll-mt-6">
-          <ActionCard
-            icon={<Users />}
-            title="Evidence inventory"
-            description={`${evidence.length} property items · chain of custody intact`}
-            action={canCreateRecords(accessLevel) ? 'Log property' : 'Read only'}
-            onClick={() =>
-              canCreateRecords(accessLevel) &&
-              setActivePanel('evidence')
-            }
-          >
-            <div className="font-mono text-xs text-muted-foreground">
-              AUDIT READY <span className="text-primary">●</span>
-            </div>
-          </ActionCard>
+        <div id="evidence" className="scroll-mt-6 grid gap-3 sm:grid-cols-2">
+          <a href="/app/evidence" className="rounded-lg border p-5 hover:bg-muted/30"><h3 className="font-semibold">Evidence Log</h3><p className="text-sm text-muted-foreground">Inspect and edit evidence records</p></a>
+          <a href="/app/property" className="rounded-lg border p-5 hover:bg-muted/30"><h3 className="font-semibold">Property Log</h3><p className="text-sm text-muted-foreground">Inspect and edit property records</p></a>
         </div>
       </section>
 
