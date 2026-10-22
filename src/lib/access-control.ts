@@ -28,7 +28,7 @@ export const canManageUsers = (level: AccessLevel) =>
   ['admin', 'support', 'backend'].includes(level)
 
 export const canEditSchedule = (level: AccessLevel) =>
-  ['supervisor', 'admin', 'support', 'backend'].includes(level)
+  ['supervisor', 'admin', 'backend'].includes(level)
 
 /**
  * Roles that each access level is permitted to assign.

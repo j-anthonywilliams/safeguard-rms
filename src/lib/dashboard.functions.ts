@@ -328,23 +328,27 @@ export const getDashboardData = createServerFn({
         [userId, customer.id],
     ),
 
-    db.query<DashboardAttendanceLog>(
+    db.query<DashboardEvidence>(
       `
         SELECT
           id,
           user_id AS "userId",
-          event_type AS "eventType",
-          event_at AS "eventAt",
-          latitude,
-          longitude,
-          accuracy
-        FROM attendance_logs
-        WHERE user_id = $1
-          AND customer_id = $2
-        ORDER BY event_at DESC
-        LIMIT 30
+          item_number AS "itemNumber",
+          description,
+          location,
+          status,
+          incident_id AS "incidentId",
+          created_at AS "createdAt"
+        FROM evidence
+        WHERE customer_id = $1
+          AND (
+            user_id = $2
+            OR $3 IN ('admin', 'backend')
+          )
+        ORDER BY created_at DESC
+        LIMIT 100
       `,
-      [userId, customer.id],
+      [customer.id, userId, accessLevel],
     ),
 
     db.query<DashboardDirectoryUser>(
@@ -357,7 +361,7 @@ export const getDashboardData = createServerFn({
         WHERE COALESCE(is_archived, 0) = 0
         ORDER BY created_at ASC
         LIMIT 100
-      `,
+        `,
     ),
   ])
 
@@ -725,34 +729,30 @@ export const reviewIncident = createServerFn({
   })
 
 
-export const getPanelEvidence = createServerFn({
-  method: 'GET',
-}).handler(async () => {
-  const authorizedUser = await requireActiveUser()
 
-  const db = getDb()
+db.query<DashboardEvidence>(
+  `
+    SELECT
+      id,
+      user_id AS "userId",
+      item_number AS "itemNumber",
+      description,
+      location,
+      status,
+      incident_id AS "incidentId",
+      created_at AS "createdAt"
+    FROM evidence
+    WHERE customer_id = $1
+      AND (
+        user_id = $2
+        OR $3 IN ('admin', 'backend')
+      )
+    ORDER BY created_at DESC
+    LIMIT 100
+  `,
+  [customer.id, userId, accessLevel],
+),
 
-  const result = await db.query<DashboardEvidence>(
-    `
-      SELECT
-        id,
-        user_id AS "userId",
-        item_number AS "itemNumber",
-        description,
-        location,
-        status,
-        incident_id AS "incidentId",
-        created_at AS "createdAt"
-      FROM evidence
-      WHERE user_id = $1
-      ORDER BY created_at DESC
-      LIMIT 8
-    `,
-    [authorizedUser.id],
-  )
-
-  return result.rows
-})
 
 
 export const createCaseFile = createServerFn({
