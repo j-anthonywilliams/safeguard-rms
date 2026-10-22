@@ -893,6 +893,55 @@ export const assignIncidentToCaseFile = createServerFn({ method: 'POST' })
     } finally { connection.release() }
   })
 
+export const getCaseNotes = createServerFn({ method: 'GET' })
+  .inputValidator((data: { caseFileId: string }) => data)
+  .handler(async ({ data }) => {
+    const user = await requireRole(['user', 'supervisor', 'admin', 'backend'])
+    const customer = await getCustomerContext()
+    const db = getDb()
+    const file = await db.query<{ id: string; user_id: string; client_id: string | null; site_id: string | null }>(
+      `SELECT id, user_id, client_id, site_id FROM case_files WHERE id = $1 AND customer_id = $2`,
+      [data.caseFileId, customer.id],
+    )
+    const record = file.rows[0]
+    if (!record) throw new Error('Case file not found')
+    if (user.role !== 'admin' && user.role !== 'backend' && user.id !== record.user_id) {
+      await validateOperationalAssignment(db, customer.id, user.id, user.role, record.client_id, record.site_id)
+    }
+    const result = await db.query<{ id: string; note: string; authorId: string; createdAt: string }>(
+      `SELECT id, note, author_id AS "authorId", created_at AS "createdAt"
+       FROM case_file_notes WHERE case_file_id = $1 AND customer_id = $2 ORDER BY created_at DESC`,
+      [data.caseFileId, customer.id],
+    )
+    return result.rows
+  })
+
+export const addCaseNote = createServerFn({ method: 'POST' })
+  .inputValidator((data: { caseFileId: string; note: string }) => data)
+  .handler(async ({ data }) => {
+    const user = await requireRole(['user', 'supervisor', 'admin', 'backend'])
+    const customer = await getCustomerContext()
+    const db = getDb()
+    const note = data.note.trim()
+    if (!note || note.length > 10000) throw new Error('Note must be between 1 and 10000 characters')
+    const file = await db.query<{ user_id: string; client_id: string | null; site_id: string | null }>(
+      `SELECT user_id, client_id, site_id FROM case_files WHERE id = $1 AND customer_id = $2 AND LOWER(status) NOT IN ('archived', 'closed')`,
+      [data.caseFileId, customer.id],
+    )
+    const record = file.rows[0]
+    if (!record) throw new Error('Active case file not found')
+    if (user.role !== 'admin' && user.role !== 'backend' && user.id !== record.user_id) {
+      if (user.role !== 'supervisor') throw new Error('Not authorized to add notes to this case')
+      await validateOperationalAssignment(db, customer.id, user.id, user.role, record.client_id, record.site_id)
+    }
+    await db.query(
+      `INSERT INTO case_file_notes (id, customer_id, case_file_id, author_id, note, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [crypto.randomUUID(), customer.id, data.caseFileId, user.id, note, new Date().toISOString()],
+    )
+    return { saved: true }
+  })
+
 export const createCaseFile = createServerFn({
   method: 'POST',
 })

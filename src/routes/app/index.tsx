@@ -10,6 +10,8 @@ import { authClient } from '@/lib/auth-client'
 import { getOrganizationStructure } from '@/lib/organization.functions'
 import {
   assignIncidentToCaseFile,
+  getCaseNotes,
+  addCaseNote,
   createAttendanceLog,
   createCaseFile,
   createEvidence,
@@ -167,6 +169,18 @@ function DashboardHome() {
   const [caseFiles, setCaseFiles] = useState<CaseFile[]>([])
   const [caseSelections, setCaseSelections] = useState<Record<string, string>>({})
   const [caseLinkBusy, setCaseLinkBusy] = useState<string | null>(null)
+  const [openCaseId, setOpenCaseId] = useState<string | null>(null)
+  const [caseNotes, setCaseNotes] = useState<{ id: string; note: string; authorId: string; createdAt: string }[]>([])
+  const [newCaseNote, setNewCaseNote] = useState('')
+  const [caseNoteBusy, setCaseNoteBusy] = useState(false)
+  useEffect(() => {
+    if (!openCaseId) { setCaseNotes([]); return }
+    let active = true
+    getCaseNotes({ data: { caseFileId: openCaseId } })
+      .then(notes => { if (active) setCaseNotes(notes) })
+      .catch(error => { if (active) toast.error(error instanceof Error ? error.message : 'Could not load case notes') })
+    return () => { active = false }
+  }, [openCaseId])
   const [equipment, setEquipment] = useState<Equipment[]>([])
   const [evidence, setEvidence] = useState<Evidence[]>([])
   const [events, setEvents] = useState<CustodyEvent[]>([])
@@ -800,68 +814,62 @@ return (
           </CardHeader>
 
           <CardContent className="p-0">
-            {caseFiles.length ? (
-              caseFiles.map(file => (
-                <div
-                  key={file.id}
-                  className="flex items-center justify-between gap-3 border-b border-border px-5 py-3 last:border-0"
-                >
-                  <div>
-                    <p className="text-sm font-medium">
-                      {file.caseNumber} · {file.title}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {file.status} ·{' '}
-                      {incidents.filter(item => item.caseFileId === file.id).length}{' '}
-                      report(s)
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <select
-                      className="max-w-48 rounded-md border border-input bg-background p-2 text-xs"
-                      aria-label={`Select existing report for ${file.caseNumber}`}
-                      value={caseSelections[file.id] || ''}
-                      onChange={event => setCaseSelections(prev => ({ ...prev, [file.id]: event.target.value }))}
-                    >
-                      <option value="">Select existing report</option>
-                      {incidents.filter(item => !item.parentIncidentId && item.caseFileId !== file.id).map(item => (
-                        <option key={item.id} value={item.id}>{item.reportNumber}</option>
-                      ))}
-                    </select>
-                    <Button variant="outline" size="sm"
-                      disabled={!caseSelections[file.id] || caseLinkBusy !== null || !canCreateRecords(accessLevel)}
-                      onClick={async () => {
-                        setCaseLinkBusy(file.id)
-                        try {
-                          await assignIncidentToCaseFile({ data: { incidentId: caseSelections[file.id], caseFileId: file.id } })
-                          toast.success('Report linked to case file')
-                          window.location.reload()
-                        } catch (error) {
-                          toast.error(error instanceof Error ? error.message : 'Unable to link report')
-                        } finally { setCaseLinkBusy(null) }
-                      }}
-                    >Link report</Button>
-                    <Button variant="ghost" size="sm" onClick={() => setActivePanel('incident')}
-                      disabled={!canCreateRecords(accessLevel)}>New report</Button>
-                    {incidents.filter(item => !item.parentIncidentId && item.caseFileId === file.id).map(item => (
-                      <Button key={item.id} variant="ghost" size="sm" disabled={caseLinkBusy !== null || !canCreateRecords(accessLevel)}
-                        onClick={async () => {
+            {caseFiles.length ?
+              openCaseId ? (() => {
+                const file = caseFiles.find(item => item.id === openCaseId)
+                if (!file) return <p className="p-5 text-sm">Case file not found.</p>
+                const linked = incidents.filter(item => item.caseFileId === file.id)
+                return <div className="space-y-5 p-5">
+                  <Button variant="outline" size="sm" onClick={() => setOpenCaseId(null)}>Back to case files</Button>
+                  <div><h3 className="text-lg font-semibold">{file.caseNumber} · {file.title}</h3>
+                    <p className="text-sm text-muted-foreground">{file.status} · Lead: {file.leadOfficer || 'Unassigned'}</p></div>
+                  <section className="space-y-3 rounded-md border p-4">
+                    <h4 className="font-semibold">Case Notes</h4>
+                    {caseNotes.length ? caseNotes.map(note => <div key={note.id} className="border-b pb-3 last:border-0">
+                      <p className="whitespace-pre-wrap text-sm">{note.note}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{directoryUsers.find(user => user.id === note.authorId)?.displayName || directoryUsers.find(user => user.id === note.authorId)?.email || note.authorId} · {note.createdAt}</p>
+                    </div>) : <p className="text-sm text-muted-foreground">No case notes yet.</p>}
+                    {canCreateRecords(accessLevel) && <><textarea className="w-full rounded-md border bg-background p-2 text-sm" rows={3} maxLength={10000}
+                      placeholder="Add a case note" value={newCaseNote} onChange={event => setNewCaseNote(event.target.value)} />
+                      <Button size="sm" disabled={caseNoteBusy || !newCaseNote.trim()} onClick={async () => {
+                        setCaseNoteBusy(true)
+                        try { await addCaseNote({ data: { caseFileId: file.id, note: newCaseNote } });
+                          setCaseNotes(await getCaseNotes({ data: { caseFileId: file.id } })); setNewCaseNote(''); toast.success('Case note saved')
+                        } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not save case note') }
+                        finally { setCaseNoteBusy(false) }
+                      }}>Save Note</Button></>}
+                  </section>
+                  <section className="space-y-3 rounded-md border p-4">
+                    <h4 className="font-semibold">Associated Reports ({linked.length})</h4>
+                    {linked.length ? linked.map(item => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 border-b py-2 last:border-0">
+                      <div><p className="text-sm font-medium">{item.reportNumber} · {item.subjectName}</p><p className="text-xs text-muted-foreground">{item.approvalStatus} · {item.incidentDate}</p></div>
+                      <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => { setEditingIncident(item); setActivePanel('incident') }}>Open Report</Button>
+                        {!item.parentIncidentId && <Button size="sm" variant="outline" disabled={caseLinkBusy !== null || !canCreateRecords(accessLevel)} onClick={async () => {
                           setCaseLinkBusy(file.id)
-                          try {
-                            await assignIncidentToCaseFile({ data: { incidentId: item.id, caseFileId: null } })
-                            toast.success('Report removed from case file')
-                            window.location.reload()
-                          } catch (error) {
-                            toast.error(error instanceof Error ? error.message : 'Unable to unlink report')
-                          } finally { setCaseLinkBusy(null) }
-                        }}
-                      >Remove {item.reportNumber}</Button>
-                    ))}
-                  </div>
+                          try { await assignIncidentToCaseFile({ data: { incidentId: item.id, caseFileId: null } }); toast.success('Report removed'); window.location.reload() }
+                          catch (error) { toast.error(error instanceof Error ? error.message : 'Unable to unlink report') }
+                          finally { setCaseLinkBusy(null) }
+                        }}>Remove</Button>}</div>
+                    </div>) : <p className="text-sm text-muted-foreground">No associated reports.</p>}
+                    <div className="flex flex-wrap gap-2"><select className="rounded-md border bg-background p-2 text-xs" aria-label="Select report to add"
+                      value={caseSelections[file.id] || ''} onChange={event => setCaseSelections(prev => ({ ...prev, [file.id]: event.target.value }))}>
+                      <option value="">Select existing report</option>
+                      {incidents.filter(item => !item.parentIncidentId && item.caseFileId !== file.id).map(item => <option key={item.id} value={item.id}>{item.reportNumber}</option>)}
+                    </select><Button variant="outline" size="sm" disabled={!caseSelections[file.id] || caseLinkBusy !== null || !canCreateRecords(accessLevel)} onClick={async () => {
+                      setCaseLinkBusy(file.id)
+                      try { await assignIncidentToCaseFile({ data: { incidentId: caseSelections[file.id], caseFileId: file.id } }); toast.success('Report linked'); window.location.reload() }
+                      catch (error) { toast.error(error instanceof Error ? error.message : 'Unable to link report') }
+                      finally { setCaseLinkBusy(null) }
+                    }}>Add Report</Button></div>
+                  </section>
                 </div>
-              ))
-            ) : (
+              })() : caseFiles.map(file => <div key={file.id} className="flex items-center justify-between gap-3 border-b px-5 py-3 last:border-0">
+                <div><p className="text-sm font-medium">{file.caseNumber} · {file.title}</p>
+                  <p className="text-xs text-muted-foreground">{file.status} · {incidents.filter(item => item.caseFileId === file.id).length} report(s)</p>
+                  <p className="text-xs text-muted-foreground">{incidents.filter(item => item.caseFileId === file.id).map(item => item.reportNumber).join(', ') || 'No reports linked'}</p></div>
+                <Button variant="outline" size="sm" onClick={() => { setNewCaseNote(''); setOpenCaseId(file.id) }}>Open Case File</Button>
+              </div>)
+             : (
               <Empty
                 icon={<ClipboardPlus />}
                 text="No case files yet."
