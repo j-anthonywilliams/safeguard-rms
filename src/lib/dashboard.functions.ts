@@ -159,7 +159,7 @@ export const getDashboardData = createServerFn({
                 ORDER BY created_at DESC
                 LIMIT 100
               `,
-              [customer.id],
+              [customer.id, userId, accessLevel],
             )
     : db.query<DashboardIncident>(
         `
@@ -231,7 +231,7 @@ export const getDashboardData = createServerFn({
           ORDER BY i.created_at DESC
           LIMIT 100
         `,
-        [userId, customer.id],
+        [customer.id, userId],
       )
 
   const [
@@ -262,7 +262,7 @@ export const getDashboardData = createServerFn({
           ORDER BY updated_at DESC
           LIMIT 100
         `,
-        [userId, customer.id],
+        [customer.id, userId],
       ),
 
     db.query<DashboardEquipment>(
@@ -281,7 +281,7 @@ export const getDashboardData = createServerFn({
         ORDER BY updated_at DESC
         LIMIT 8
       `,
-      [userId, customer.id],
+      [customer.id, userId],
     ),
 
     db.query<DashboardEvidence>(
@@ -296,12 +296,15 @@ export const getDashboardData = createServerFn({
           incident_id AS "incidentId",
           created_at AS "createdAt"
         FROM evidence
-        WHERE user_id = $1
-          AND customer_id = $2
+        WHERE customer_id = $1
+          AND (
+            user_id = $2
+            OR $3 IN ('admin', 'backend')
+          )
         ORDER BY created_at DESC
         LIMIT 100
       `,
-      [userId, customer.id],
+      [customer.id, userId, accessLevel],
     ),
 
     db.query<DashboardCustodyEvent>(
@@ -328,27 +331,23 @@ export const getDashboardData = createServerFn({
         [userId, customer.id],
     ),
 
-    db.query<DashboardEvidence>(
+    db.query<DashboardAttendanceLog>(
       `
         SELECT
           id,
           user_id AS "userId",
-          item_number AS "itemNumber",
-          description,
-          location,
-          status,
-          incident_id AS "incidentId",
-          created_at AS "createdAt"
-        FROM evidence
-        WHERE customer_id = $1
-          AND (
-            user_id = $2
-            OR $3 IN ('admin', 'backend')
-          )
-        ORDER BY created_at DESC
-        LIMIT 100
+          event_type AS "eventType",
+          event_at AS "eventAt",
+          latitude,
+          longitude,
+          accuracy
+        FROM attendance_logs
+        WHERE user_id = $1
+          AND customer_id = $2
+        ORDER BY event_at DESC
+        LIMIT 10
       `,
-      [customer.id, userId, accessLevel],
+      [userId, customer.id],
     ),
 
     db.query<DashboardDirectoryUser>(
@@ -728,32 +727,38 @@ export const reviewIncident = createServerFn({
     }
   })
 
+export const getPanelEvidence = createServerFn({
+  method: 'GET',
+}).handler(async () => {
+  const authorizedUser = await requireActiveUser()
+  const customer = await getCustomerContext()
+  const db = getDb()
 
+  const result = await db.query<DashboardEvidence>(
+    `
+      SELECT
+        id,
+        user_id AS "userId",
+        item_number AS "itemNumber",
+        description,
+        location,
+        status,
+        incident_id AS "incidentId",
+        created_at AS "createdAt"
+      FROM evidence
+      WHERE customer_id = $1
+        AND (
+          user_id = $2
+          OR $3 IN ('admin', 'backend')
+        )
+      ORDER BY created_at DESC
+      LIMIT 100
+    `,
+    [customer.id, authorizedUser.id, authorizedUser.role],
+  )
 
-db.query<DashboardEvidence>(
-  `
-    SELECT
-      id,
-      user_id AS "userId",
-      item_number AS "itemNumber",
-      description,
-      location,
-      status,
-      incident_id AS "incidentId",
-      created_at AS "createdAt"
-    FROM evidence
-    WHERE customer_id = $1
-      AND (
-        user_id = $2
-        OR $3 IN ('admin', 'backend')
-      )
-    ORDER BY created_at DESC
-    LIMIT 100
-  `,
-  [customer.id, userId, accessLevel],
-),
-
-
+  return result.rows
+})
 
 export const createCaseFile = createServerFn({
   method: 'POST',
