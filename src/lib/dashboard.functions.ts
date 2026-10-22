@@ -802,6 +802,36 @@ export const getPanelEvidence = createServerFn({
   return result.rows
 })
 
+
+async function validateOperationalAssignment(
+  db: ReturnType<typeof getDb>,
+  customerId: string,
+  userId: string,
+  role: string,
+  clientId: string | null,
+  siteId: string | null,
+) {
+  if (!clientId && !siteId) return
+  if (siteId && !clientId) throw new Error('Select a client before a site')
+  const result = await db.query(
+    `SELECT 1 FROM clients c
+     LEFT JOIN sites s ON s.id = $2 AND s.client_id = c.id
+       AND s.customer_id = c.customer_id AND s.status = 'active'
+     WHERE c.id = $1 AND c.customer_id = $3 AND c.status = 'active'
+       AND ($2::text IS NULL OR s.id IS NOT NULL)
+       AND (
+         $5 IN ('admin', 'backend')
+         OR EXISTS (SELECT 1 FROM user_customer_assignments a WHERE a.user_id = $4 AND a.customer_id = $3)
+         OR ($2::text IS NULL AND EXISTS (SELECT 1 FROM user_client_assignments a WHERE a.user_id = $4 AND a.customer_id = $3 AND a.client_id = c.id))
+         OR ($2::text IS NULL AND EXISTS (SELECT 1 FROM user_site_assignments a WHERE a.user_id = $4 AND a.customer_id = $3 AND a.client_id = c.id))
+         OR EXISTS (SELECT 1 FROM user_site_assignments a WHERE a.user_id = $4 AND a.customer_id = $3 AND a.client_id = c.id AND a.site_id = $2)
+         OR EXISTS (SELECT 1 FROM user_client_assignments a WHERE a.user_id = $4 AND a.customer_id = $3 AND a.client_id = c.id)
+       ) LIMIT 1`,
+    [clientId, siteId, customerId, userId, role],
+  )
+  if (!result.rows.length) throw new Error('Client or site is not authorized or active')
+}
+
 export const createCaseFile = createServerFn({
   method: 'POST',
 })
@@ -809,6 +839,8 @@ export const createCaseFile = createServerFn({
     (data: {
       caseNumber: string
       title: string
+      clientId: string | null
+      siteId: string | null
     }) => data,
   )
   .handler(async ({ data }) => {
@@ -822,6 +854,9 @@ export const createCaseFile = createServerFn({
     const customer = await getCustomerContext()
     const db = getDb()
     const now = new Date().toISOString()
+    const clientId = data.clientId || null
+    const siteId = data.siteId || null
+    await validateOperationalAssignment(db, customer.id, authorizedUser.id, authorizedUser.role, clientId, siteId)
 
     const caseNumber = data.caseNumber.trim()
     const title = data.title.trim()
@@ -836,6 +871,8 @@ export const createCaseFile = createServerFn({
           id,
           user_id,
           customer_id,
+          client_id,
+          site_id,
           case_number,
           title,
           status,
@@ -844,7 +881,7 @@ export const createCaseFile = createServerFn({
           updated_at
         )
         VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
         )
         RETURNING
           id,
@@ -860,6 +897,8 @@ export const createCaseFile = createServerFn({
         crypto.randomUUID(),
         authorizedUser.id,
         customer.id,
+        clientId,
+        siteId,
         caseNumber,
         title,
         'Open',
@@ -885,6 +924,8 @@ export const createEquipment = createServerFn({
       name: string
       serialNumber: string
       assignedTo: string
+      clientId: string | null
+      siteId: string | null
     }) => data,
   )
   .handler(async ({ data }) => {
@@ -898,6 +939,9 @@ export const createEquipment = createServerFn({
     const customer = await getCustomerContext()
     const db = getDb()
     const now = new Date().toISOString()
+    const clientId = data.clientId || null
+    const siteId = data.siteId || null
+    await validateOperationalAssignment(db, customer.id, authorizedUser.id, authorizedUser.role, clientId, siteId)
 
     const name = data.name.trim()
     const serialNumber = data.serialNumber.trim()
@@ -914,6 +958,8 @@ export const createEquipment = createServerFn({
           id,
           user_id,
           customer_id,
+          client_id,
+          site_id,
           name,
           serial_number,
           status,
@@ -921,7 +967,7 @@ export const createEquipment = createServerFn({
           updated_at
         )
         VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
         )
         RETURNING
           id,
@@ -936,6 +982,8 @@ export const createEquipment = createServerFn({
         crypto.randomUUID(),
         authorizedUser.id,
         customer.id,
+        clientId,
+        siteId,
         name,
         serialNumber,
         'Available',
@@ -1099,8 +1147,11 @@ export const updateEvidenceIncident = createServerFn({
         UPDATE evidence
         SET incident_id = $1
         WHERE id = $2
-          AND user_id = $3
           AND customer_id = $4
+          AND (
+            user_id = $3
+            OR $5 IN ('admin', 'backend')
+          )
           AND (
             $1::text IS NULL
             OR EXISTS (
@@ -1125,6 +1176,7 @@ export const updateEvidenceIncident = createServerFn({
         data.evidenceId,
         authorizedUser.id,
         customer.id,
+        authorizedUser.role,
       ],
     )
 

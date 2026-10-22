@@ -1204,14 +1204,14 @@ function Panel({
   }>({ clients: [], sites: [] })
 
   useEffect(() => {
-    if (type !== 'incident') return
+    if (type !== 'incident' && type !== 'case' && type !== 'equipment') return
     let active = true
     getOrganizationStructure().then(result => {
       if (!active) return
       const clients = result.clients.filter(item => item.status === 'active')
       const sites = result.sites.filter(item => item.status === 'active')
       setOrganization({ clients, sites })
-      if (!initialIncident) {
+      if (type === 'incident' && !initialIncident) {
         const defaultClient = clients.length === 1 ? clients[0].id : ''
         const matchingSites = sites.filter(item => item.clientId === defaultClient)
         setForm(previous => ({
@@ -1224,6 +1224,7 @@ function Panel({
     return () => { active = false }
   }, [type, initialIncident])
 
+  const [assignOrganization, setAssignOrganization] = useState(false)
   const [caseTitle, setCaseTitle] = useState('')
   const [caseNumber, setCaseNumber] = useState('')
   const [codeDispositions, setCodeDispositions] = useState<CodeDisposition[]>(() => initialIncident ? parseCodeDispositions(initialIncident) : [{ code: '', disposition: '' }])
@@ -1316,6 +1317,34 @@ const field = (
   )
 }
 
+
+  const optionalOrganizationAssignment = (type === 'case' || type === 'equipment') ? (
+    <div className="sm:col-span-2 space-y-3 rounded-md border p-3">
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={assignOrganization}
+          onChange={event => { setAssignOrganization(event.target.checked); setForm(previous => ({...previous, clientId: '', siteId: ''})) }} />
+        Assign this record to a Client/Site?
+      </label>
+      {assignOrganization && <div className="grid gap-3 sm:grid-cols-2">
+        <label className="text-sm">Client (optional)
+          <select className="mt-1 w-full rounded-md border p-2" value={form.clientId || ''}
+            onChange={event => setForm(previous => ({...previous, clientId: event.target.value, siteId: ''}))}>
+            <option value="">Not assigned</option>
+            {organization.clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
+          </select>
+        </label>
+        <label className="text-sm">Site (optional)
+          <select className="mt-1 w-full rounded-md border p-2" value={form.siteId || ''}
+            disabled={!form.clientId}
+            onChange={event => setForm(previous => ({...previous, siteId: event.target.value}))}>
+            <option value="">Not assigned</option>
+            {organization.sites.filter(site => site.clientId === form.clientId).map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
+          </select>
+        </label>
+      </div>}
+    </div>
+  ) : null
+
   const equipmentAssignment = type === 'equipment' ? <label className="space-y-1.5 sm:col-span-2"><span className="text-xs font-medium">Assign to user</span><select className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring" value={form.assignedTo || userId} onChange={update('assignedTo')}><option value={userId}>Myself</option>{directoryUsers.filter(item => item.id !== userId).map(item => <option key={item.id} value={item.id}>{item.displayName || item.email}</option>)}</select></label> : null
     const save = async () => {
       if (!canCreateRecords(accessLevel)) {
@@ -1342,6 +1371,8 @@ const field = (
             data: {
               caseNumber: caseNumber.trim(),
               title: caseTitle.trim(),
+              clientId: assignOrganization ? form.clientId || null : null,
+              siteId: assignOrganization ? form.siteId || null : null,
             },
           })
 
@@ -1518,6 +1549,8 @@ const field = (
               name: form.name.trim(),
               serialNumber: form.serialNumber.trim(),
               assignedTo: form.assignedTo || userId,
+              clientId: assignOrganization ? form.clientId || null : null,
+              siteId: assignOrganization ? form.siteId || null : null,
             },
           })
         }
@@ -1642,6 +1675,7 @@ const field = (
                   required
                 />
               </div>
+              {optionalOrganizationAssignment}
             </>
 
           ) : renderType === 'incident' ? (
@@ -1942,6 +1976,7 @@ const field = (
               )}
 
               {equipmentAssignment}
+              {optionalOrganizationAssignment}
             </>
           ) : (
             <>
