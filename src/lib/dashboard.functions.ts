@@ -1269,6 +1269,35 @@ export const updateEvidenceIncident = createServerFn({
               FROM incidents
               WHERE incidents.id = $1
                 AND incidents.customer_id = $4
+                AND (
+                  $5 IN ('admin', 'backend')
+                  OR incidents.user_id = $3
+                  OR (
+                    $5 = 'supervisor'
+                    AND (
+                      EXISTS (
+                        SELECT 1 FROM user_customer_assignments a
+                        WHERE a.user_id = $3 AND a.customer_id = incidents.customer_id
+                      )
+                      OR EXISTS (
+                        SELECT 1 FROM user_client_assignments a
+                        JOIN clients c ON c.id = a.client_id
+                          AND c.customer_id = a.customer_id AND c.status = 'active'
+                        WHERE a.user_id = $3 AND a.customer_id = incidents.customer_id
+                          AND a.client_id = incidents.client_id
+                      )
+                      OR EXISTS (
+                        SELECT 1 FROM user_site_assignments a
+                        JOIN sites s ON s.id = a.site_id
+                          AND s.client_id = a.client_id AND s.customer_id = a.customer_id
+                          AND s.status = 'active'
+                        WHERE a.user_id = $3 AND a.customer_id = incidents.customer_id
+                          AND a.client_id = incidents.client_id
+                          AND a.site_id = incidents.site_id
+                      )
+                    )
+                  )
+                )
             )
           )
         RETURNING
