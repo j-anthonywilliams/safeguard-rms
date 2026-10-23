@@ -713,6 +713,18 @@ export const assignOrganizationUser = createServerFn({
 
     const { userId, assignmentType, organizationId } = data
 
+    // Global platform roles must not receive customer, client, or site assignments.
+    const targetRole = await db.query<{ role: string }>(
+      `SELECT role FROM app_roles WHERE user_id = $1 LIMIT 1`,
+      [userId],
+    )
+    if (!targetRole.rows[0]) {
+      throw new Error('Target user has no application role')
+    }
+    if (['support', 'backend'].includes(targetRole.rows[0].role)) {
+      throw new Error('Global Support and Backend users cannot be assigned to organizations')
+    }
+
     if (!userId || !organizationId) {
       throw new Error('User and organization are required')
     }
