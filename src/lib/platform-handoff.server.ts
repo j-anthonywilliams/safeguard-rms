@@ -43,25 +43,9 @@ export async function createPlatformHandoff(
 
   const db = getPlatformDb()
 
-  const mappingResult = await db.query<{
-    customer_user_id: string
-  }>(
-    `
-      SELECT customer_user_id
-      FROM platform_customer_user_mappings
-      WHERE platform_user_id = $1
-        AND customer_id = $2
-        AND status = 'active'
-      LIMIT 1
-    `,
-    [session.user.id, customerId],
-  )
-
-  if (!mappingResult.rows[0]) {
-    throw new Error(
-      'No verified customer account mapping exists',
-    )
-  }
+  // Authorization is established by the authenticated platform principal
+  // and requireCustomerAccess above. Global Backend users have no local
+  // customer account and must not require an identity mapping here.
 
   const code = randomBytes(32).toString('base64url')
 
@@ -105,7 +89,8 @@ export async function createPlatformHandoff(
 export interface RedeemedPlatformHandoff {
   platformUserId: string
   customerId: string
-  customerUserId: string
+  customerUserId: string | null
+  platformRole: 'backend' | null
 }
 
 /**
@@ -142,14 +127,13 @@ export async function redeemPlatformHandoff(
     const result = await client.query<{
       platform_user_id: string
       customer_id: string
-      customer_user_id: string
+      customer_user_id: string | null
+      platform_role: 'backend' | null
     }>(
       `
         UPDATE platform_auth_handoffs h
         SET consumed_at = NOW()
-        FROM platform_customers c,
-             platform_customer_user_mappings m,
-             "user" u
+        FROM platform_customers c, "user" u
         WHERE h.code_hash = $1
           AND h.customer_id = $2
           AND h.consumed_at IS NULL
@@ -157,34 +141,38 @@ export async function redeemPlatformHandoff(
           AND c.id = h.customer_id
           AND c.status = 'active'
           AND u.id = h.user_id
-          AND m.platform_user_id = h.user_id
-          AND m.customer_id = h.customer_id
-          AND m.status = 'active'
+          AND NOT EXISTS (
+            SELECT 1 FROM platform_user_roles blocked
+            WHERE blocked.user_id = h.user_id
+              AND blocked.platform_role = 'support'
+          )
           AND (
             EXISTS (
-              SELECT 1
-              FROM platform_customer_memberships cm
+              SELECT 1 FROM platform_user_roles pr
+              WHERE pr.user_id = h.user_id
+                AND pr.platform_role = 'backend'
+            )
+            OR EXISTS (
+              SELECT 1 FROM platform_customer_memberships cm
               WHERE cm.user_id = h.user_id
                 AND cm.customer_id = h.customer_id
                 AND cm.status = 'active'
             )
-            OR EXISTS (
-              SELECT 1
-              FROM platform_user_roles pr
-              WHERE pr.user_id = h.user_id
-                AND pr.platform_role = 'backend'
-            )
-          )
-          AND NOT EXISTS (
-            SELECT 1
-            FROM platform_user_roles pr
-            WHERE pr.user_id = h.user_id
-              AND pr.platform_role = 'support'
           )
         RETURNING
           h.user_id AS platform_user_id,
           h.customer_id,
-          m.customer_user_id
+          (SELECT m.customer_user_id
+           FROM platform_customer_user_mappings m
+           WHERE m.platform_user_id = h.user_id
+             AND m.customer_id = h.customer_id
+             AND m.status = 'active'
+           LIMIT 1) AS customer_user_id,
+          (SELECT 'backend'::text
+           FROM platform_user_roles pr
+           WHERE pr.user_id = h.user_id
+             AND pr.platform_role = 'backend'
+           LIMIT 1) AS platform_role
       `,
       [codeHash, expectedCustomerId],
     )
@@ -203,6 +191,7 @@ export async function redeemPlatformHandoff(
       platformUserId: redeemed.platform_user_id,
       customerId: redeemed.customer_id,
       customerUserId: redeemed.customer_user_id,
+      platformRole: redeemed.platform_role,
     }
   } catch (error) {
     await client.query('ROLLBACK')
