@@ -1,6 +1,7 @@
 export type AccessLevel =
   | 'user'
   | 'supervisor'
+  | 'office_staff'
   | 'admin'
   | 'support'
   | 'backend'
@@ -8,6 +9,7 @@ export type AccessLevel =
 export const ACCESS_LEVELS: AccessLevel[] = [
   'user',
   'supervisor',
+  'office_staff',
   'admin',
   'support',
   'backend',
@@ -16,13 +18,14 @@ export const ACCESS_LEVELS: AccessLevel[] = [
 export const ACCESS_LABELS: Record<AccessLevel, string> = {
   user: 'User',
   supervisor: 'Supervisor',
+  office_staff: 'Office Staff',
   admin: 'Admin',
   support: 'Support',
   backend: 'Backend',
 }
 
 export const canCreateRecords = (level: AccessLevel) =>
-  level !== 'support'
+  level !== 'support' && level !== 'office_staff'
 
 export const canManageUsers = (level: AccessLevel) =>
   ['admin', 'support', 'backend'].includes(level)
@@ -45,13 +48,15 @@ export const GRANTABLE_ROLES: Record<
 > = {
   user: [],
   supervisor: [],
-  admin: ['supervisor', 'user'],
+  office_staff: [],
+  admin: ['supervisor', 'office_staff', 'user'],
   support: ['admin', 'supervisor', 'user'],
   backend: [
     'backend',
     'support',
     'admin',
     'supervisor',
+    'office_staff',
     'user',
   ],
 }

@@ -6,11 +6,12 @@ import { getCustomerContext } from '@/lib/customer-context.server'
 export type LogKind = 'evidence' | 'property'
 export interface LogRecord { id: string; itemNumber: string; description: string; location: string; status: string; incidentId: string | null; createdAt: string; userId: string }
 const allowed = ['user', 'supervisor', 'admin', 'backend'] as const
+const propertyAllowed = ['user', 'office_staff', 'supervisor', 'admin', 'backend'] as const
 
 export const listLogRecords = createServerFn({ method: 'GET' })
   .inputValidator((data: { kind: LogKind }) => data)
   .handler(async ({ data }) => {
-    const user = await requireRole([...allowed])
+    const user = await requireRole(data.kind === 'property' ? [...propertyAllowed] : [...allowed])
     const customer = await getCustomerContext()
     const db = getDb()
     if (data.kind === 'evidence') {
@@ -24,7 +25,7 @@ export const listLogRecords = createServerFn({ method: 'GET' })
 export const saveLogRecord = createServerFn({ method: 'POST' })
   .inputValidator((data: { kind: LogKind; id: string | null; itemNumber: string; description: string; location: string }) => data)
   .handler(async ({ data }) => {
-    const user = await requireRole([...allowed])
+    const user = await requireRole(data.kind === 'property' ? [...propertyAllowed] : [...allowed])
     const customer = await getCustomerContext()
     const db = getDb()
     const itemNumber = data.itemNumber.trim()
@@ -33,7 +34,7 @@ export const saveLogRecord = createServerFn({ method: 'POST' })
     if (!itemNumber || !description || !location || itemNumber.length > 120 || description.length > 10000 || location.length > 500) throw new Error('Valid item number, description and location required')
     if (data.id) {
       const table = data.kind === 'evidence' ? 'evidence' : 'property_log'
-      const result = await db.query(`UPDATE ${table} SET description = $1, location = $2 WHERE id = $3 AND customer_id = $4 AND (user_id = $5 OR $6 IN ('admin','backend')) RETURNING id`, [description, location, data.id, customer.id, user.id, user.role])
+      const result = await db.query(`UPDATE ${table} SET description = $1, location = $2 WHERE id = $3 AND customer_id = $4 AND (user_id = $5 OR $6 IN ('admin','backend') OR ($6 = 'office_staff' AND $7 = 'property')) RETURNING id`, [description, location, data.id, customer.id, user.id, user.role, data.kind])
       if (!result.rowCount) throw new Error('Record not found or update not authorized')
       return { id: data.id }
     }
