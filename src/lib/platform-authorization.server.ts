@@ -95,10 +95,10 @@ export async function getCustomerMemberships(
 }
 
 /**
- * Operational customer access.
- *
- * Requires an explicit active membership.
- * Platform roles alone never grant operational access.
+ * Customer operational routing authorization.
+ * Backend is a global platform role and does not require membership.
+ * Support is administrative-only and cannot enter operational customers.
+ * Customer roles require active customer membership.
  */
 export async function requireCustomerAccess(
   userId: string,
@@ -109,12 +109,17 @@ export async function requireCustomerAccess(
   }
 
   const db = getPlatformDb()
+  const platformRole = await getPlatformRole(userId)
+
+  if (platformRole === 'support') {
+    throw new Error('Support cannot access operational customer environments')
+  }
 
   const result = await db.query<{
     customerId: string
     customerCode: string
     customerName: string
-    customerRole: CustomerRole
+    customerRole: CustomerRole | null
     websiteSlug: string
   }>(
     `
@@ -124,27 +129,27 @@ export async function requireCustomerAccess(
         c.name AS "customerName",
         m.customer_role AS "customerRole",
         c.website_slug AS "websiteSlug"
-      FROM platform_customer_memberships m
-      JOIN platform_customers c
-        ON c.id = m.customer_id
-      WHERE m.user_id = $1
-        AND m.customer_id = $2
-        AND m.status = 'active'
+      FROM platform_customers c
+      LEFT JOIN platform_customer_memberships m
+        ON m.customer_id = c.id
+       AND m.user_id = $1
+       AND m.status = 'active'
+      WHERE c.id = $2
         AND c.status = 'active'
+        AND (
+          $3::text = 'backend'
+          OR m.id IS NOT NULL
+        )
       LIMIT 1
     `,
-    [userId, customerId],
+    [userId, customerId, platformRole],
   )
 
   const membership = result.rows[0]
 
   if (!membership) {
-    throw new Error(
-      'You are not authorized to access this customer',
-    )
+    throw new Error('You are not authorized to access this customer')
   }
-
-  const platformRole = await getPlatformRole(userId)
 
   return {
     ...membership,
