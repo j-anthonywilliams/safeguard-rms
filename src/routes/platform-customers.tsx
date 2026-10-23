@@ -1,3 +1,4 @@
+import { canRegisterCustomers, registerPlatformCustomer } from '@/lib/platform-customer-registration.functions'
 
 import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
@@ -20,6 +21,16 @@ export const Route = createFileRoute('/platform-customers')({
 
 function PlatformCustomers() {
   const [customers, setCustomers] = useState<Customer[]>([])
+  const [mayRegister, setMayRegister] = useState(false)
+  const [showRegistration, setShowRegistration] = useState(false)
+  const [customerCode, setCustomerCode] = useState('')
+  const [customerName, setCustomerName] = useState('')
+  const [websiteSlug, setWebsiteSlug] = useState('')
+  const [registering, setRegistering] = useState(false)
+  const [registrationMessage, setRegistrationMessage] = useState<string | null>(null)
+  useEffect(() => {
+    void canRegisterCustomers().then(setMayRegister).catch(() => setMayRegister(false))
+  }, [])
   const [loading, setLoading] = useState(true)
   const [opening, setOpening] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -82,10 +93,39 @@ function PlatformCustomers() {
           <h1 className="text-3xl font-semibold">
             SafeGuard-RMS Platform
           </h1>
-          <p className="mt-2 text-muted-foreground">
-            Customer Directory
-          </p>
+          <p className="mt-2 text-muted-foreground">Customer Directory</p>
         </div>
+        {mayRegister && (
+          <div className="space-y-3 rounded-lg border p-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold">Customer Registration</h2>
+              <button type="button" className="rounded border px-3 py-2" onClick={() => setShowRegistration(value => !value)}>
+                {showRegistration ? 'Cancel' : 'Create Customer'}
+              </button>
+            </div>
+            {registrationMessage && <p role="status" className="text-sm">{registrationMessage}</p>}
+            {showRegistration && (
+              <form className="grid gap-3" onSubmit={async event => {
+                event.preventDefault()
+                setRegistering(true)
+                setRegistrationMessage(null)
+                try {
+                  await registerPlatformCustomer({ data: { customerCode, name: customerName, websiteSlug } })
+                  setRegistrationMessage('Customer registered as inactive. Provisioning required.')
+                  setCustomerCode(''); setCustomerName(''); setWebsiteSlug('')
+                  setShowRegistration(false)
+                } catch (err) {
+                  setRegistrationMessage(err instanceof Error ? err.message : 'Registration failed')
+                } finally { setRegistering(false) }
+              }}>
+                <input aria-label="Customer code" required placeholder="Customer code (DEV002)" className="rounded border bg-background p-2" value={customerCode} onChange={e => setCustomerCode(e.target.value)} />
+                <input aria-label="Customer name" required placeholder="Customer name" className="rounded border bg-background p-2" value={customerName} onChange={e => setCustomerName(e.target.value)} />
+                <input aria-label="Website slug" required placeholder="Website slug (dev002)" className="rounded border bg-background p-2" value={websiteSlug} onChange={e => setWebsiteSlug(e.target.value)} />
+                <button type="submit" disabled={registering} className="rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50">Register Customer</button>
+              </form>
+            )}
+          </div>
+        )}
 
         {error && (
           <div role="alert" className="rounded border p-4 text-destructive">

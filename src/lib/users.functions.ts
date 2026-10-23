@@ -22,7 +22,7 @@ export interface UserDirectoryRecord {
 export interface UserRoleRecord {
   id: string
   userId: string
-  role: 'user' | 'supervisor' | 'office_staff' | 'admin' | 'support' | 'backend'
+  role: 'user' | 'investigator' | 'supervisor' | 'office_staff' | 'admin' | 'support' | 'backend'
   createdAt: string
   updatedAt: string
 }
@@ -31,7 +31,7 @@ export interface PendingInvitationRecord {
   id: string
   email: string
   displayName: string
-  requestedRole: 'user' | 'supervisor' | 'office_staff' | 'admin' | 'support' | 'backend'
+  requestedRole: 'user' | 'investigator' | 'supervisor' | 'office_staff' | 'admin' | 'support' | 'backend'
   invitedBy: string
   createdAt: string
   updatedAt: string

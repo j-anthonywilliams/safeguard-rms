@@ -1,0 +1,1 @@
+Investigator is a customer role. Personnel endpoints must explicitly deny Investigator when those endpoints are implemented. Support/Backend remain legacy customer roles in existing records pending migration to platform identities. Do not remove legacy records without identity mapping.

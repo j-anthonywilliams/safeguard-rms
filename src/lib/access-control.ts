@@ -1,6 +1,7 @@
 export type AccessLevel =
   | 'user'
   | 'supervisor'
+  | 'investigator'
   | 'office_staff'
   | 'admin'
   | 'support'
@@ -9,6 +10,7 @@ export type AccessLevel =
 export const ACCESS_LEVELS: AccessLevel[] = [
   'user',
   'supervisor',
+  'investigator',
   'office_staff',
   'admin',
   'support',
@@ -18,6 +20,7 @@ export const ACCESS_LEVELS: AccessLevel[] = [
 export const ACCESS_LABELS: Record<AccessLevel, string> = {
   user: 'User',
   supervisor: 'Supervisor',
+  investigator: 'Investigator',
   office_staff: 'Office Staff',
   admin: 'Admin',
   support: 'Support',
@@ -31,7 +34,7 @@ export const canManageUsers = (level: AccessLevel) =>
   ['admin', 'support', 'backend'].includes(level)
 
 export const canEditSchedule = (level: AccessLevel) =>
-  ['supervisor', 'admin', 'backend'].includes(level)
+  ['supervisor', 'investigator', 'admin', 'backend'].includes(level)
 
 /**
  * Roles that each access level is permitted to assign.
@@ -48,17 +51,11 @@ export const GRANTABLE_ROLES: Record<
 > = {
   user: [],
   supervisor: [],
+  investigator: [],
   office_staff: [],
-  admin: ['supervisor', 'office_staff', 'user'],
-  support: ['admin', 'supervisor', 'user'],
-  backend: [
-    'backend',
-    'support',
-    'admin',
-    'supervisor',
-    'office_staff',
-    'user',
-  ],
+  admin: ['supervisor', 'investigator', 'office_staff', 'user'],
+  support: [],
+  backend: ['admin', 'supervisor', 'investigator', 'office_staff', 'user'],
 }
 
 export const canGrantRole = (

@@ -1,4 +1,3 @@
-import { canRegisterCustomers, registerPlatformCustomer } from '@/lib/platform-customer-registration.functions'
 
 import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
@@ -54,18 +53,11 @@ export const Route = createFileRoute('/app/organization')({
 
 function OrganizationManagementPage() {
   const [customers, setCustomers] = useState<OrganizationCustomer[]>([])
-  const [mayRegister, setMayRegister] = useState(false)
-  const [openRegistration, setOpenRegistration] = useState<'customer' | 'client' | 'site' | null>(null)
-  const [customerCodeInput, setCustomerCodeInput] = useState('')
-  const [customerNameInput, setCustomerNameInput] = useState('')
-  const [customerSlugInput, setCustomerSlugInput] = useState('')
-  const [customerRegisterBusy, setCustomerRegisterBusy] = useState(false)
-  useEffect(() => { void canRegisterCustomers().then(setMayRegister).catch(() => setMayRegister(false)) }, [])
   const [clients, setClients] = useState<OrganizationClient[]>([])
   const [sites, setSites] = useState<OrganizationSite[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-
+  const [openRegistration, setOpenRegistration] = useState<'client' | 'site' | null>(null)
   const [clientCode, setClientCode] = useState('')
   const [editingClientId, setEditingClientId] = useState<string | null>(null)
   const [editingClientName, setEditingClientName] = useState('')
@@ -499,31 +491,12 @@ return (
                   <Building2 className="h-5 w-5" />
                   Customer Directory
                 </CardTitle>
-                {mayRegister && (
-                  <Button size="sm" variant="outline" onClick={() => setOpenRegistration(openRegistration === 'customer' ? null : 'customer')}>
-                    <Plus className="mr-2 h-4 w-4" />Create Customer
-                  </Button>
-                )}
+                <a href="/platform-customers" className="inline-flex items-center rounded-md border px-3 py-2 text-sm font-medium">
+                  <Plus className="mr-2 h-4 w-4" /> Platform Customer Directory
+                </a>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-          {mayRegister && openRegistration === 'customer' && <div className="space-y-3 rounded-md border p-4">
-            <h3 className="font-medium">Register New Customer</h3>
-            <p className="text-sm text-muted-foreground">Registration creates an inactive platform directory entry. Database provisioning and activation are separate steps.</p>
-            <Input aria-label="New customer code" placeholder="Customer code (e.g. DEV002)" value={customerCodeInput} onChange={e => setCustomerCodeInput(e.target.value)} />
-            <Input aria-label="New customer name" placeholder="Customer name" value={customerNameInput} onChange={e => setCustomerNameInput(e.target.value)} />
-            <Input aria-label="New customer slug" placeholder="Website slug (e.g. dev002)" value={customerSlugInput} onChange={e => setCustomerSlugInput(e.target.value)} />
-            <Button disabled={customerRegisterBusy} onClick={async () => {
-              setCustomerRegisterBusy(true)
-              try {
-                await registerPlatformCustomer({data:{customerCode:customerCodeInput,name:customerNameInput,websiteSlug:customerSlugInput}})
-                toast.success('Customer registered as inactive; provisioning required')
-                setCustomerCodeInput(''); setCustomerNameInput(''); setCustomerSlugInput(''); setOpenRegistration(null); await loadOrganization()
-              } catch (error) { toast.error(error instanceof Error ? error.message : 'Registration failed') }
-              finally { setCustomerRegisterBusy(false) }
-            }}>Register Customer</Button>
-            <Button variant="outline" onClick={() => setOpenRegistration(null)}>Cancel</Button>
-          </div>}
               {customers.map(customer => (
                 <div
                   key={customer.id}
