@@ -63,7 +63,7 @@ function PlatformLogin() {
           `/api/platform-auth/oauth2/authorize${window.location.search}`,
         )
       } else {
-        window.location.assign('/')
+        window.location.assign('/platform-customers')
       }
     } catch (err) {
       setError(
@@ -72,6 +72,38 @@ function PlatformLogin() {
           : 'Authentication failed',
       )
     } finally {
+      setBusy(false)
+    }
+  }
+
+  const signInWithGoogle = async () => {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const hasOidcRequest =
+        params.has('client_id') &&
+        params.has('response_type') &&
+        params.has('redirect_uri')
+      const callbackURL = hasOidcRequest
+        ? `/api/platform-auth/oauth2/authorize${window.location.search}`
+        : '/platform-customers'
+
+      const response = await fetch('/api/platform-auth/sign-in/social', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: 'google', callbackURL }),
+      })
+      const result = await response.json().catch(() => null)
+      if (!response.ok || !result?.url) {
+        throw new Error(result?.message || 'Google sign-in is unavailable')
+      }
+      window.location.assign(result.url)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Google sign-in failed')
       setBusy(false)
     }
   }
@@ -136,6 +168,14 @@ function PlatformLogin() {
             onClick={signIn}
           >
             {busy ? 'Signing in...' : 'Sign In'}
+          </Button>
+          <Button
+            className="w-full"
+            variant="outline"
+            disabled={busy}
+            onClick={signInWithGoogle}
+          >
+            Continue with Google
           </Button>
         </CardContent>
       </Card>

@@ -128,8 +128,13 @@ function PlatformCustomers() {
         )}
 
         {error && (
-          <div role="alert" className="rounded border p-4 text-destructive">
-            {error}
+          <div role="alert" className="space-y-2 rounded border p-4 text-destructive">
+            <p>{error}</p>
+            {error === 'Platform authentication required' && (
+              <a className="inline-block rounded border px-3 py-2 text-sm underline" href="/platform-login">
+                Sign in to the central platform
+              </a>
+            )}
           </div>
         )}
 
