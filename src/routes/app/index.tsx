@@ -191,12 +191,9 @@ function DashboardHome() {
   const [reviewingIncident, setReviewingIncident] = useState<Incident | null>(null)
   const [rejectionFeedback, setRejectionFeedback] = useState('')
   const [reviewBusy, setReviewBusy] = useState(false)
-  const [dark, setDark] = useState(false)
   const [accessLevel, setAccessLevel] = useState<AccessLevel>('user')
   const [directoryUsers, setDirectoryUsers] = useState<{ id: string; email: string; displayName?: string | null }[]>([])
   
-  useEffect(() => { 
-  const saved = localStorage.getItem('safeguard-theme') === 'dark'; document.documentElement.classList.toggle('dark', saved); setTimeout(() => setDark(saved), 0) }, [])
 
   useEffect(() => {
     if (!user) return
@@ -241,7 +238,6 @@ function DashboardHome() {
   const availableEquipment = useMemo(() => equipment.filter(item => item.status === 'Available').length, [equipment])
   const activeCases = useMemo(() => caseFiles.filter(file => !['closed', 'archived', 'complete'].includes(file.status.toLowerCase())), [caseFiles])
   const pendingReviews = useMemo(() => incidents.filter(item => getApprovalStatus(item.approvalStatus) === 'Pending'), [incidents])
-  const toggleTheme = () => { const next = !dark; setDark(next); localStorage.setItem('safeguard-theme', String(next)); document.documentElement.classList.toggle('dark', next) }
   const clockEvent = (eventType: 'clock_in' | 'clock_out') => {
     if (!user || clockBusy) return
     setClockBusy(true)
@@ -366,41 +362,6 @@ function DashboardHome() {
 
 return (
   <div className="min-h-dvh bg-background text-foreground">
-    <header className="border-b border-border bg-background/90 px-4 py-3 backdrop-blur md:px-8">
-      <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-md">
-            <ShieldCheck className="size-5" />
-          </div>
-
-          <div>
-            <p className="text-sm font-semibold tracking-tight">
-              SafeGuard RMS
-            </p>
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-              Operations / Command center
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleTheme}
-            aria-label="Toggle light and dark mode"
-          >
-            {dark ? (
-              <Sun className="size-4" />
-            ) : (
-              <Moon className="size-4" />
-            )}
-          </Button>
-
-          <UserAccountMenu />
-        </div>
-      </div>
-    </header>
 
     <main className="mx-auto max-w-[1440px] space-y-7 px-4 py-6 md:px-8 md:py-8">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -438,22 +399,7 @@ return (
             {clockBusy ? 'Locating…' : isClockedIn ? 'Clock out' : 'Clock in'}
           </Button>
 
-          <Button
-            variant="outline"
-            onClick={() => setActivePanel('evidence')}
-            disabled={!canCreateRecords(accessLevel)}
-          >
-            <Archive className="size-4" />
-            Log property
-          </Button>
 
-          <Button
-            onClick={() => openIncidentEditor()}
-            disabled={!canCreateRecords(accessLevel)}
-          >
-            <Plus className="size-4" />
-            New report
-          </Button>
         </div>
       </div>
 
@@ -629,7 +575,7 @@ return (
 
           <CardContent className="p-0">
             {incidents.length ? (
-              incidents.map(item => (
+              incidents.slice(0, 10).map(item => (
                 <div
                   key={item.id}
                   className="flex items-center justify-between gap-4 border-b border-border px-5 py-4 transition-colors last:border-0 hover:bg-muted/30"
@@ -797,7 +743,7 @@ return (
                       <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => { setEditingIncident(item); setActivePanel('incident') }}>Open Report</Button>
                         {!item.parentIncidentId && <Button size="sm" variant="outline" disabled={caseLinkBusy !== null || !canCreateRecords(accessLevel)} onClick={async () => {
                           setCaseLinkBusy(file.id)
-                          try { await assignIncidentToCaseFile({ data: { incidentId: item.id, caseFileId: null } }); toast.success('Report removed'); window.location.reload() }
+                          try { await assignIncidentToCaseFile({ data: { incidentId: item.id, caseFileId: null } }); const refreshed = await getDashboardData(); setIncidents(refreshed.incidents); setCaseFiles(refreshed.caseFiles); setCaseSelections(prev => ({ ...prev, [file.id]: '' })); toast.success('Report removed') }
                           catch (error) { toast.error(error instanceof Error ? error.message : 'Unable to unlink report') }
                           finally { setCaseLinkBusy(null) }
                         }}>Remove</Button>}</div>
@@ -808,7 +754,7 @@ return (
                       {incidents.filter(item => !item.parentIncidentId && item.caseFileId !== file.id).map(item => <option key={item.id} value={item.id}>{item.reportNumber}</option>)}
                     </select><Button variant="outline" size="sm" disabled={!caseSelections[file.id] || caseLinkBusy !== null || !canCreateRecords(accessLevel)} onClick={async () => {
                       setCaseLinkBusy(file.id)
-                      try { await assignIncidentToCaseFile({ data: { incidentId: caseSelections[file.id], caseFileId: file.id } }); toast.success('Report linked'); window.location.reload() }
+                      try { await assignIncidentToCaseFile({ data: { incidentId: caseSelections[file.id], caseFileId: file.id } }); const refreshed = await getDashboardData(); setIncidents(refreshed.incidents); setCaseFiles(refreshed.caseFiles); setCaseSelections(prev => ({ ...prev, [file.id]: '' })); toast.success('Report linked') }
                       catch (error) { toast.error(error instanceof Error ? error.message : 'Unable to link report') }
                       finally { setCaseLinkBusy(null) }
                     }}>Add Report</Button></div>

@@ -18,6 +18,7 @@ import React, {
 import type { ReactNode } from 'react'
 import { authClient } from '@/lib/auth-client'
 import { getCurrentUserRole } from '@/lib/users.functions'
+import { getPlatformNavigationRole } from '@/lib/platform-navigation.functions'
 import { Button } from '@/components/ui/button'
 import {
   Tooltip,
@@ -27,6 +28,7 @@ import {
 } from '@/components/ui/tooltip'
 import {
   Archive,
+  ArrowLeft,
   Building2,
   CalendarDays,
   ClipboardPlus,
@@ -152,6 +154,16 @@ export function AppSidebarShell() {
       .catch(() => setAccessLevel('user'))
   }, [session])
 
+  const [platformNavigationRole, setPlatformNavigationRole] = useState<'support' | 'backend' | null>(null)
+
+  useEffect(() => {
+    let active = true
+    getPlatformNavigationRole()
+      .then(({ role }) => { if (active) setPlatformNavigationRole(role) })
+      .catch(() => { if (active) setPlatformNavigationRole(null) })
+    return () => { active = false }
+  }, [session])
+
   const [collapsed, setCollapsed] = useState(false)
 
   useEffect(() => {
@@ -172,7 +184,7 @@ export function AppSidebarShell() {
     <TooltipProvider delayDuration={0}>
       <div
         className={cn(
-          'sticky top-0 flex h-dvh flex-col bg-background border-r border-border overflow-hidden',
+          'sticky top-0 flex h-full flex-col bg-background border-r border-border overflow-hidden',
           'transition-[width] duration-200 ease-linear shrink-0',
           collapsed ? 'w-[3rem]' : 'w-[15rem]'
         )}
@@ -180,22 +192,10 @@ export function AppSidebarShell() {
         {/* Header */}
         <div
           className={cn(
-            'flex items-center gap-2 shrink-0 border-b border-border h-[52px] px-3',
+            'flex items-center justify-end shrink-0 border-b border-border h-[44px] px-3',
             collapsed && 'justify-center px-2'
           )}
         >
-          {!collapsed && (
-            <>
-              <div className="flex items-center justify-center h-7 w-7 rounded-md bg-sidebar-primary text-sidebar-primary-foreground text-xs font-bold shrink-0">
-                SG
-              </div>
-
-              <span className="flex-1 font-semibold text-sm truncate">
-                SafeGuard RMS
-              </span>
-            </>
-          )}
-
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -244,6 +244,18 @@ export function AppSidebarShell() {
               </React.Fragment>
             ))}
         </div>
+        {platformNavigationRole && (
+          <div className="shrink-0 border-t border-border px-2 py-3">
+            <NavItem
+              item={{
+                href: `${import.meta.env.VITE_PLATFORM_URL || 'http://localhost:3000'}/platform-customers`,
+                icon: <ArrowLeft className="h-4 w-4" />,
+                label: 'Back to Platform Customers',
+              }}
+              collapsed={collapsed}
+            />
+          </div>
+        )}
       </div>
     </TooltipProvider>
   )

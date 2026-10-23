@@ -9,11 +9,12 @@
  *   - Sidebar is hidden.
  *   - Sidebar opens in a Sheet drawer from the left.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Menu } from 'lucide-react'
+import { Menu, Moon, ShieldCheck, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { UserAccountMenu } from '@/components/UserAccountMenu'
 
 interface ShellProps {
   sidebar: ReactNode
@@ -27,11 +28,37 @@ export function Shell({
   children,
 }: ShellProps) {
   const [open, setOpen] = useState(false)
+  const [dark, setDark] = useState(false)
+  useEffect(() => {
+    const enabled = localStorage.getItem('safeguard-theme') === 'dark'
+    document.documentElement.classList.toggle('dark', enabled)
+    setDark(enabled)
+  }, [])
+  const toggleTheme = () => {
+    const next = !dark
+    setDark(next)
+    localStorage.setItem('safeguard-theme', String(next))
+    document.documentElement.classList.toggle('dark', next)
+  }
 
   return (
-    <div className="flex h-dvh w-full overflow-hidden">
+    <div className="flex h-dvh w-full flex-col overflow-hidden">
+      <header className="z-40 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background px-4 md:px-6">
+        <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu" onClick={() => setOpen(true)}>
+          <Menu className="size-5" />
+        </Button>
+        <span className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground"><ShieldCheck className="size-5" /></span>
+        <span className="text-sm font-semibold">{appName}</span>
+        <div className="ml-auto flex items-center gap-2">
+          <Button variant="ghost" size="icon" aria-label="Toggle theme" onClick={toggleTheme}>
+            {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+          </Button>
+          <UserAccountMenu />
+        </div>
+      </header>
+      <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* Desktop sidebar */}
-      <aside className="hidden h-dvh shrink-0 md:block">
+      <aside className="hidden h-full shrink-0 md:block">
         {sidebar}
       </aside>
 
@@ -39,7 +66,7 @@ export function Shell({
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent
           side="left"
-          className="h-dvh w-64 p-0"
+          className="h-full w-64 p-0"
         >
           {sidebar}
         </SheetContent>
@@ -47,25 +74,9 @@ export function Shell({
 
       {/* Main content */}
       <main className="flex min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
-        {/* Mobile header */}
-        <div className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background px-4 md:hidden">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="-ml-2"
-            aria-label="Open menu"
-            onClick={() => setOpen(true)}
-          >
-            <Menu className="size-5" />
-          </Button>
-
-          <span className="font-semibold text-sm">
-            {appName}
-          </span>
-        </div>
-
         {children}
       </main>
+      </div>
     </div>
   )
 }
