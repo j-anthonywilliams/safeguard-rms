@@ -160,12 +160,26 @@ export async function redeemPlatformHandoff(
           AND m.platform_user_id = h.user_id
           AND m.customer_id = h.customer_id
           AND m.status = 'active'
-          AND EXISTS (
+          AND (
+            EXISTS (
+              SELECT 1
+              FROM platform_customer_memberships cm
+              WHERE cm.user_id = h.user_id
+                AND cm.customer_id = h.customer_id
+                AND cm.status = 'active'
+            )
+            OR EXISTS (
+              SELECT 1
+              FROM platform_user_roles pr
+              WHERE pr.user_id = h.user_id
+                AND pr.platform_role = 'backend'
+            )
+          )
+          AND NOT EXISTS (
             SELECT 1
-            FROM platform_customer_memberships cm
-            WHERE cm.user_id = h.user_id
-              AND cm.customer_id = h.customer_id
-              AND cm.status = 'active'
+            FROM platform_user_roles pr
+            WHERE pr.user_id = h.user_id
+              AND pr.platform_role = 'support'
           )
         RETURNING
           h.user_id AS platform_user_id,
