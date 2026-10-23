@@ -4,12 +4,13 @@ import { ClientBoundary } from '@/components/ClientBoundary'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { listLogRecords, saveLogRecord, type LogRecord } from '@/lib/record-logs.functions'
+import { listLogRecords, saveLogRecord, listCustodyActivity, type CustodyLogEvent, type LogRecord } from '@/lib/record-logs.functions'
 import { toast } from 'sonner'
 
 export const Route = createFileRoute('/app/evidence')({ component: () => <ClientBoundary fallback={<div className="p-6">Loading...</div>}><LogScreen /></ClientBoundary> })
 function LogScreen() {
   const [records, setRecords] = useState<LogRecord[]>([])
+  const [custodyEvents, setCustodyEvents] = useState<CustodyLogEvent[]>([])
   const [selected, setSelected] = useState<LogRecord | null>(null)
   const [editing, setEditing] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -19,7 +20,7 @@ function LogScreen() {
   const [itemNumber, setItemNumber] = useState('')
   const [description, setDescription] = useState('')
   const [location, setLocation] = useState('')
-  const reload = async () => { try { setRecords(await listLogRecords({data:{kind: 'evidence'}})) } catch(e) { setError(e instanceof Error ? e.message : 'Unable to load records') } }
+  const reload = async () => { try { const [items, events] = await Promise.all([listLogRecords({data:{kind: 'evidence'}}), listCustodyActivity()]); setRecords(items); setCustodyEvents(events); setError('') } catch(e) { setError(e instanceof Error ? e.message : 'Unable to load records') } }
   useEffect(() => { void reload() }, [])
   const open = (record: LogRecord, edit: boolean) => { setSelected(record); setCreating(false); setEditing(edit); setItemNumber(record.itemNumber); setDescription(record.description); setLocation(record.location) }
   const save = async () => { setBusy(true); try { await saveLogRecord({data:{kind:'evidence',id:creating?null:selected?.id??null,itemNumber,description,location}}); toast.success('Record saved'); setSelected(null); setEditing(false); setCreating(false); await reload() } catch(e) { toast.error(e instanceof Error?e.message:'Unable to save') } finally { setBusy(false) } }
@@ -39,5 +40,11 @@ function LogScreen() {
       
       {records.filter(r=>[r.itemNumber,r.description,r.location].some(v=>v.toLowerCase().includes(search.toLowerCase()))).map(r=><div key={r.id} className="flex items-center justify-between gap-3 border-b py-3"><div><p className="font-medium">{r.itemNumber} · {r.description}</p><p className="text-sm text-muted-foreground">{r.status} · {r.location}</p></div><div className="flex gap-2"><Button variant="outline" size="sm" onClick={()=>open(r,false)}>Inspect</Button><Button variant="outline" size="sm" onClick={()=>open(r,true)}>Edit</Button></div></div>)}
     </CardContent></Card>}
+    <Card><CardHeader><CardTitle>Custody Activity</CardTitle></CardHeader><CardContent className="space-y-3">
+      {custodyEvents.length ? custodyEvents.map(event => <div key={event.id} className="border-b py-2 last:border-0">
+        <p className="text-sm font-medium">{event.itemNumber} · {event.action}</p>
+        <p className="text-xs text-muted-foreground">{event.actor} · {event.eventAt} · {event.note || 'No note added'}</p>
+      </div>) : <p className="text-sm text-muted-foreground">No custody activity recorded.</p>}
+    </CardContent></Card>
   </main>
 }

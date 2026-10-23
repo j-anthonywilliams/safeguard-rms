@@ -43,3 +43,31 @@ export const saveLogRecord = createServerFn({ method: 'POST' })
     await db.query(`INSERT INTO property_log (id, customer_id, user_id, item_number, description, location, status, created_at) VALUES ($1,$2,$3,$4,$5,$6,'In custody',$7)`, [id, customer.id, user.id, itemNumber, description, location, new Date().toISOString()])
     return { id }
   })
+
+
+export interface CustodyLogEvent {
+  id: string
+  evidenceId: string
+  itemNumber: string
+  action: string
+  actor: string
+  note: string | null
+  eventAt: string
+}
+
+export const listCustodyActivity = createServerFn({ method: 'GET' })
+  .handler(async () => {
+    const user = await requireRole([...allowed])
+    const customer = await getCustomerContext()
+    const result = await getDb().query<CustodyLogEvent>(
+      `SELECT ce.id, ce.evidence_id AS "evidenceId", e.item_number AS "itemNumber",
+              ce.action, ce.actor, ce.note, ce.event_at AS "eventAt"
+       FROM custody_events ce
+       JOIN evidence e ON e.id = ce.evidence_id
+       WHERE e.customer_id = $1
+         AND (e.user_id = $2 OR $3 IN ('admin', 'backend'))
+       ORDER BY ce.event_at DESC LIMIT 500`,
+      [customer.id, user.id, user.role],
+    )
+    return result.rows
+  })

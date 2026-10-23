@@ -709,44 +709,7 @@ return (
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="border-b border-border bg-muted/30 pb-4">
-            <CardTitle className="text-base">
-              Custody activity
-            </CardTitle>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Evidence movement, logged live
-            </p>
-          </CardHeader>
 
-          <CardContent className="p-0">
-            {events.length ? (
-              events.slice(0, 5).map(event => (
-                <div
-                  key={event.id}
-                  className="flex gap-3 border-b border-border px-5 py-4 last:border-0"
-                >
-                  <div className="mt-1 size-2 shrink-0 rounded-full bg-primary ring-4 ring-primary/10" />
-
-                  <div>
-                    <p className="text-sm font-medium">
-                      {event.action}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {event.actor} · {event.note || 'No note added'}
-                    </p>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <Empty
-                icon={<Archive />}
-                text="No custody events logged."
-                action={() => setActivePanel('evidence')}
-              />
-            )}
-          </CardContent>
-        </Card>
       </section>
 
       <section className="grid gap-5 lg:grid-cols-2">

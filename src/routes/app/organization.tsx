@@ -1,3 +1,4 @@
+import { canRegisterCustomers, registerPlatformCustomer } from '@/lib/platform-customer-registration.functions'
 
 import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
@@ -53,6 +54,13 @@ export const Route = createFileRoute('/app/organization')({
 
 function OrganizationManagementPage() {
   const [customers, setCustomers] = useState<OrganizationCustomer[]>([])
+  const [mayRegister, setMayRegister] = useState(false)
+  const [openRegistration, setOpenRegistration] = useState<'customer' | 'client' | 'site' | null>(null)
+  const [customerCodeInput, setCustomerCodeInput] = useState('')
+  const [customerNameInput, setCustomerNameInput] = useState('')
+  const [customerSlugInput, setCustomerSlugInput] = useState('')
+  const [customerRegisterBusy, setCustomerRegisterBusy] = useState(false)
+  useEffect(() => { void canRegisterCustomers().then(setMayRegister).catch(() => setMayRegister(false)) }, [])
   const [clients, setClients] = useState<OrganizationClient[]>([])
   const [sites, setSites] = useState<OrganizationSite[]>([])
   const [loading, setLoading] = useState(true)
@@ -151,6 +159,7 @@ setAssignments(userAssignments)
 
       setClientCode('')
       setClientName('')
+      setOpenRegistration(null)
 
       await loadOrganization()
     } catch (error) {
@@ -266,6 +275,7 @@ const handleCreateSite = async () => {
     setSiteCity('')
     setSiteState('')
     setSitePostalCode('')
+    setOpenRegistration(null)
 
     await loadOrganization()
   } catch (error) {
@@ -480,14 +490,40 @@ return (
             </Card>
           </div>
 
+
+
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5" />
-                Customer Information
-              </CardTitle>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5" />
+                  Customer Directory
+                </CardTitle>
+                {mayRegister && (
+                  <Button size="sm" variant="outline" onClick={() => setOpenRegistration(openRegistration === 'customer' ? null : 'customer')}>
+                    <Plus className="mr-2 h-4 w-4" />Create Customer
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
+          {mayRegister && openRegistration === 'customer' && <div className="space-y-3 rounded-md border p-4">
+            <h3 className="font-medium">Register New Customer</h3>
+            <p className="text-sm text-muted-foreground">Registration creates an inactive platform directory entry. Database provisioning and activation are separate steps.</p>
+            <Input aria-label="New customer code" placeholder="Customer code (e.g. DEV002)" value={customerCodeInput} onChange={e => setCustomerCodeInput(e.target.value)} />
+            <Input aria-label="New customer name" placeholder="Customer name" value={customerNameInput} onChange={e => setCustomerNameInput(e.target.value)} />
+            <Input aria-label="New customer slug" placeholder="Website slug (e.g. dev002)" value={customerSlugInput} onChange={e => setCustomerSlugInput(e.target.value)} />
+            <Button disabled={customerRegisterBusy} onClick={async () => {
+              setCustomerRegisterBusy(true)
+              try {
+                await registerPlatformCustomer({data:{customerCode:customerCodeInput,name:customerNameInput,websiteSlug:customerSlugInput}})
+                toast.success('Customer registered as inactive; provisioning required')
+                setCustomerCodeInput(''); setCustomerNameInput(''); setCustomerSlugInput(''); setOpenRegistration(null); await loadOrganization()
+              } catch (error) { toast.error(error instanceof Error ? error.message : 'Registration failed') }
+              finally { setCustomerRegisterBusy(false) }
+            }}>Register Customer</Button>
+            <Button variant="outline" onClick={() => setOpenRegistration(null)}>Cancel</Button>
+          </div>}
               {customers.map(customer => (
                 <div
                   key={customer.id}
@@ -510,21 +546,29 @@ return (
 
           <Card>
             <CardHeader>
-              <CardTitle>Create Client</CardTitle>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>Client Directory</CardTitle>
+                <Button size="sm" variant="outline" onClick={() => setOpenRegistration(openRegistration === 'client' ? null : 'client')}>
+                  <Plus className="mr-2 h-4 w-4" />Create Client
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+
+            <CardContent className="space-y-3">
+          {openRegistration === 'client' && <div className="space-y-4 rounded-md border p-4">
+              <h3 className="font-medium">Create Client</h3>
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-1.5">
-                    <label htmlFor="site-code" className="text-sm font-medium">
-                      Site Code
+                    <label htmlFor="client-code" className="text-sm font-medium">
+                      Client Code
                     </label>
 
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <button
                           type="button"
-                          aria-label="Site code requirements"
+                          aria-label="Client code requirements"
                           className="text-muted-foreground hover:text-foreground"
                         >
                           <Info className="h-4 w-4" />
@@ -533,7 +577,7 @@ return (
 
                       <TooltipContent side="top" className="max-w-72">
                         <div className="space-y-1 text-xs">
-                          <p className="font-semibold">Site Code Requirements</p>
+                          <p className="font-semibold">Client Code Requirements</p>
                           <p>1–32 characters.</p>
                           <p>Letters A–Z, numbers 0–9, hyphens (-), and underscores (_) only.</p>
                           <p>No spaces or periods.</p>
@@ -546,8 +590,8 @@ return (
                   </div>
 
                   <Input
-                    id="site-code"
-                    placeholder="e.g. HQ, SITE001, NORTH-01"
+                    id="client-code"
+                    placeholder="e.g. CLIENT001"
                     value={siteCode}
                     onChange={event => setSiteCode(event.target.value)}
                     maxLength={32}
@@ -568,15 +612,10 @@ return (
                 <Plus className="mr-2 h-4 w-4" />
                 {saving ? 'Creating...' : 'Create Client'}
               </Button>
-            </CardContent>
-          </Card>
+              <Button variant="outline" onClick={() => setOpenRegistration(null)}>Cancel</Button>
+          </div>}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Client Directory</CardTitle>
-            </CardHeader>
 
-            <CardContent className="space-y-3">
               {clients.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No clients found.
@@ -675,7 +714,14 @@ return (
             </CardHeader>
 
             <CardContent className="space-y-6">
-              <div className="space-y-4">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-medium">Site Directory</h3>
+                  <Button size="sm" variant="outline" onClick={() => setOpenRegistration(openRegistration === 'site' ? null : 'site')}>
+                    <Plus className="mr-2 h-4 w-4" />Create Site
+                  </Button>
+                </div>
+              {openRegistration === 'site' && <div className="space-y-4 rounded-md border p-4">
                 <h3 className="font-medium">Create Site</h3>
 
                 <select
@@ -738,10 +784,10 @@ return (
                   <Plus className="mr-2 h-4 w-4" />
                   {siteSaving ? 'Creating...' : 'Create Site'}
                 </Button>
-              </div>
+                <Button variant="outline" onClick={() => setOpenRegistration(null)}>Cancel</Button>
+              </div>}
 
-              <div className="space-y-3">
-                <h3 className="font-medium">Site Directory</h3>
+
 
                 
                 {sites.length === 0 ? (
