@@ -1,6 +1,7 @@
 
 import { getPlatformDb } from './platform-db.server'
 import { requirePlatformSession } from './platform-auth.server'
+import { resolveGlobalPlatformIdentity } from './platform-global-identity.server'
 
 export type PlatformRole = 'support' | 'backend'
 
@@ -23,26 +24,8 @@ export interface CustomerMembership {
 export async function getPlatformRole(
   userId: string,
 ): Promise<PlatformRole | null> {
-  const db = getPlatformDb()
-
-  const result = await db.query<{
-    platform_role: PlatformRole
-  }>(
-    `
-      SELECT platform_role
-      FROM platform_user_roles
-      WHERE user_id = $1
-      ORDER BY
-        CASE platform_role
-          WHEN 'backend' THEN 1
-          WHEN 'support' THEN 2
-        END
-      LIMIT 1
-    `,
-    [userId],
-  )
-
-  return result.rows[0]?.platform_role ?? null
+  const identity = await resolveGlobalPlatformIdentity(userId)
+  return identity?.role ?? null
 }
 
 /**
