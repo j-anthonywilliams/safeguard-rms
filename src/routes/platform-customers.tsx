@@ -168,14 +168,14 @@ function PlatformCustomers() {
                   type="button"
                   disabled={
                     opening !== null ||
-                    customer.customerRole === null
+                    (customer.customerRole === null && customer.platformRole !== 'backend')
                   }
                   onClick={() => openCustomer(customer.customerId)}
                   className="rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
                 >
                   {opening === customer.customerId
                     ? 'Opening...'
-                    : customer.customerRole === null
+                    : customer.customerRole === null && customer.platformRole !== 'backend'
                       ? 'Not assigned'
                       : 'Open Customer'}
                 </button>
