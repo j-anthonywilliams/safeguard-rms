@@ -192,6 +192,7 @@ function DashboardHome() {
   const [rejectionFeedback, setRejectionFeedback] = useState('')
   const [reviewBusy, setReviewBusy] = useState(false)
   const [accessLevel, setAccessLevel] = useState<AccessLevel>('user')
+  const [dashboardLoadError, setDashboardLoadError] = useState<string | null>(null)
   const [directoryUsers, setDirectoryUsers] = useState<{ id: string; email: string; displayName?: string | null }[]>([])
   
 
@@ -201,6 +202,7 @@ function DashboardHome() {
     const loadRecords = async () => {
       try {
         const data = await getDashboardData()
+        setDashboardLoadError(null)
 
         setAccessLevel(data.accessLevel)
         setIncidents(data.incidents)
@@ -223,6 +225,7 @@ function DashboardHome() {
         setAttendanceLogs(data.attendanceLogs)
         setDirectoryUsers(data.directoryUsers)
       } catch (error) {
+        setDashboardLoadError(error instanceof Error ? error.message : 'Unable to load records')
         toast.error('Could not load records', {
           description:
             error instanceof Error
@@ -364,6 +367,7 @@ return (
   <div className="min-h-dvh bg-background text-foreground">
 
     <main className="mx-auto max-w-[1440px] space-y-7 px-4 py-6 md:px-8 md:py-8">
+      {dashboardLoadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">Records unavailable: {dashboardLoadError}</div>}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.2em] text-primary">

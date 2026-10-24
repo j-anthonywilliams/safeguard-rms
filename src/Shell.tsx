@@ -11,7 +11,7 @@
  */
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Menu, Moon, ShieldCheck, Sun } from 'lucide-react'
+import { Menu, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { UserAccountMenu } from '@/components/UserAccountMenu'
@@ -28,18 +28,14 @@ export function Shell({
   children,
 }: ShellProps) {
   const [open, setOpen] = useState(false)
-  const [dark, setDark] = useState(false)
+  // System appearance is authoritative; changes apply without a page reload.
   useEffect(() => {
-    const enabled = localStorage.getItem('safeguard-theme') === 'dark'
-    document.documentElement.classList.toggle('dark', enabled)
-    setDark(enabled)
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const sync = () => document.documentElement.classList.toggle('dark', media.matches)
+    sync()
+    media.addEventListener('change', sync)
+    return () => media.removeEventListener('change', sync)
   }, [])
-  const toggleTheme = () => {
-    const next = !dark
-    setDark(next)
-    localStorage.setItem('safeguard-theme', String(next))
-    document.documentElement.classList.toggle('dark', next)
-  }
 
   return (
     <div className="flex h-dvh w-full flex-col overflow-hidden">
@@ -50,9 +46,6 @@ export function Shell({
         <span className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground"><ShieldCheck className="size-5" /></span>
         <span className="text-sm font-semibold">{appName}</span>
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="ghost" size="icon" aria-label="Toggle theme" onClick={toggleTheme}>
-            {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
-          </Button>
           <UserAccountMenu />
         </div>
       </header>
