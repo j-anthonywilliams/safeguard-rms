@@ -58,8 +58,53 @@ export const verifyTraining = createServerFn({method:'POST'})
    await audit(customer.id,user.id,'training_assignment',data.assignmentId,'manually_verified');return {ok:true}
  })
 
+// Template definitions are customer-scoped. A candidate receives a snapshot at creation.
+export const getOnboardingTemplates = createServerFn({method:'GET'}).handler(async () => {
+  await requireRole(['office_staff','admin','backend'])
+  const customer=await getCustomerContext()
+  const result=await getDb().query<{id:string;name:string;jobTitle:string|null;requirements:{title:string;kind:string;required:boolean}[]}>(
+    `SELECT t.id,t.name,t.job_title AS "jobTitle",COALESCE(json_agg(json_build_object('title',r.title,'kind',r.kind,'required',r.required) ORDER BY r.position) FILTER (WHERE r.id IS NOT NULL),'[]'::json) AS requirements
+     FROM personnel_onboarding_templates t LEFT JOIN personnel_onboarding_template_requirements r ON r.template_id=t.id
+     WHERE t.customer_id=$1 GROUP BY t.id ORDER BY t.job_title NULLS FIRST,t.name`,[customer.id])
+  return result.rows
+})
+
+export const saveOnboardingTemplate = createServerFn({method:'POST'})
+ .inputValidator((data:{name:string;jobTitle:string|null;requirements:{title:string;kind:string;required:boolean}[]})=>data)
+ .handler(async ({data})=>{
+   const user=await requireRole(['office_staff','admin','backend']);const customer=await getCustomerContext()
+   const name=trim(data.name,160),jobTitle=data.jobTitle?trim(data.jobTitle,160):null
+   if(!name||!Array.isArray(data.requirements)||data.requirements.length>100)throw new Error('Invalid template')
+   const allowed=['physical','document','certification','background_check','training','other']
+   const requirements=data.requirements.map(r=>({title:trim(r.title,200),kind:r.kind,required:r.required===true}))
+   if(requirements.some(r=>!r.title||!allowed.includes(r.kind)))throw new Error('Invalid requirement')
+   const db=getDb();const client=await db.connect();const templateId=id()
+   try{
+     await client.query('BEGIN')
+     if(jobTitle===null){
+       // Exactly one active master template per customer.
+       await client.query(`UPDATE personnel_onboarding_templates SET active=false WHERE customer_id=$1 AND job_title IS NULL AND active=true`,[customer.id])
+     } else {
+       await client.query(`UPDATE personnel_onboarding_templates SET active=false WHERE customer_id=$1 AND lower(job_title)=lower($2) AND active=true`,[customer.id,jobTitle])
+     }
+     await client.query(`INSERT INTO personnel_onboarding_templates(id,customer_id,name,job_title,created_by) VALUES($1,$2,$3,$4,$5)`,[templateId,customer.id,name,jobTitle,user.id])
+     for(const [i,r] of requirements.entries())await client.query(`INSERT INTO personnel_onboarding_template_requirements(id,template_id,title,kind,required,position) VALUES($1,$2,$3,$4,$5,$6)`,[id(),templateId,r.title,r.kind,r.required,i])
+     await client.query('COMMIT')
+   }catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
+   await audit(customer.id,user.id,'onboarding_template',templateId,'created',jobTitle??'master')
+   return {id:templateId}
+ })
+
+export const getMyTrainingAssignments = createServerFn({method:'GET'}).handler(async()=>{
+ const user=await requireActiveUser();const customer=await getCustomerContext()
+ if(user.role==='support'||user.role==='investigator')return []
+ const result=await getDb().query<{id:string;title:string;status:string;assignedAt:string;expirationDays:number|null}>(
+  `SELECT a.id,c.title,a.status,a.assigned_at AS "assignedAt",c.expiration_days AS "expirationDays" FROM personnel_training_assignments a JOIN personnel_training_classes c ON c.id=a.class_id AND c.customer_id=a.customer_id WHERE a.customer_id=$1 AND a.user_id=$2 ORDER BY a.assigned_at DESC LIMIT 50`,[customer.id,user.id])
+ return result.rows
+})
+
 export const addCandidate = createServerFn({method:'POST'})
- .inputValidator((data:{fullName:string;email:string})=>data)
+ .inputValidator((data:{fullName:string;email:string;jobTitle?:string})=>data)
  .handler(async ({data})=>{
    const user=await requireRole(['office_staff','admin','backend']);const customer=await getCustomerContext();const db=getDb()
    const email=trim(data.email.toLowerCase(),254);const name=trim(data.fullName,160)
@@ -67,8 +112,14 @@ export const addCandidate = createServerFn({method:'POST'})
    // Candidates get a disabled/unassigned customer identity. No app role or membership is granted.
    const existing=await db.query<{id:string}>(`SELECT id FROM users WHERE lower(email)=$1 LIMIT 1`,[email])
    if(existing.rows.length) throw new Error('User already exists; link existing users through the future candidate reconciliation workflow')
-   const userId=id();const candidateId=id();const client=await db.connect()
-   try {await client.query('BEGIN');await client.query(`INSERT INTO users (id,email,display_name,is_archived,created_at,updated_at,last_sign_in) VALUES ($1,$2,$3,1,$4,$4,$4)`,[userId,email,name,new Date().toISOString()]);await client.query(`INSERT INTO personnel_candidates (id,customer_id,user_id,full_name,email,created_by) VALUES ($1,$2,$3,$4,$5,$6)`,[candidateId,customer.id,userId,name,email,user.id]);await client.query('COMMIT')}catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
+   const userId=id();const candidateId=id();const client=await db.connect();const jobTitle=trim(data.jobTitle||'',160)
+   try {await client.query('BEGIN');await client.query(`INSERT INTO users (id,email,display_name,is_archived,created_at,updated_at,last_sign_in) VALUES ($1,$2,$3,1,$4,$4,$4)`,[userId,email,name,new Date().toISOString()]);await client.query(`INSERT INTO personnel_candidates (id,customer_id,user_id,full_name,email,created_by,job_title) VALUES ($1,$2,$3,$4,$5,$6,$7)`,[candidateId,customer.id,userId,name,email,user.id,jobTitle||null]);
+   // Snapshot active master and position requirements. No live dependency on future template edits.
+   await client.query(`INSERT INTO personnel_onboarding_steps(id,customer_id,candidate_id,title,requirement_kind,required,source_template_id)
+      SELECT md5($1::text || r.id),$2,$1,r.title,r.kind,r.required,t.id
+      FROM personnel_onboarding_templates t JOIN personnel_onboarding_template_requirements r ON r.template_id=t.id
+      WHERE t.customer_id=$2 AND t.active=true AND (t.job_title IS NULL OR lower(t.job_title)=lower($3))`,[candidateId,customer.id,jobTitle]);
+   await client.query('COMMIT')}catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
    await audit(customer.id,user.id,'candidate',candidateId,'created');return {id:candidateId}
  })
 

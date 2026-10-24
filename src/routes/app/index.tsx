@@ -1,3 +1,4 @@
+import { getMyTrainingAssignments } from '@/lib/personnel-workflows.functions'
 import {
   useEffect,
   useMemo,
@@ -193,6 +194,8 @@ function DashboardHome() {
   const [reviewBusy, setReviewBusy] = useState(false)
   const [accessLevel, setAccessLevel] = useState<AccessLevel>('user')
   const [dashboardLoadError, setDashboardLoadError] = useState<string | null>(null)
+  const [myTraining,setMyTraining]=useState<Awaited<ReturnType<typeof getMyTrainingAssignments>>>([])
+  useEffect(()=>{if(!user)return;let live=true;getMyTrainingAssignments().then(rows=>{if(live)setMyTraining(rows)}).catch(()=>{});return()=>{live=false}},[user?.id])
   const [directoryUsers, setDirectoryUsers] = useState<{ id: string; email: string; displayName?: string | null }[]>([])
   
 
@@ -367,6 +370,7 @@ return (
   <div className="min-h-dvh bg-background text-foreground">
 
     <main className="mx-auto max-w-[1440px] space-y-7 px-4 py-6 md:px-8 md:py-8">
+      <section className="rounded-lg border p-4"><div className="mb-2 flex items-center justify-between"><h2 className="font-semibold">My Training Assignments</h2><a className="text-sm underline" href="/app/training">Training Directory</a></div>{myTraining.length? <table className="w-full text-sm"><thead><tr><th className="text-left">Class</th><th className="text-left">Status</th><th className="text-left">Assigned</th></tr></thead><tbody>{myTraining.map(t=><tr key={t.id} className="border-t"><td className="py-2">{t.title}</td><td>{t.status}</td><td>{new Date(t.assignedAt).toLocaleDateString()}</td></tr>)}</tbody></table>:<p className="text-sm text-muted-foreground">No training assignments.</p>}</section>
       {dashboardLoadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">Records unavailable: {dashboardLoadError}</div>}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
