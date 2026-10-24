@@ -92,12 +92,17 @@ const NAV_ITEMS: NavItemDef[] = [
     label: 'Scheduler',
   },
   {
-    href: '/app/training-preview',
+    href: '/app/training',
     icon: <GraduationCap className="h-4 w-4" />,
-    label: 'Training & Onboarding',
+    label: 'Training Directory',
   },
   {
-    href: '/app/administrative-reports-preview',
+    href: '/app/onboarding',
+    icon: <GraduationCap className="h-4 w-4" />,
+    label: 'Onboarding',
+  },
+  {
+    href: '/app/administrative-reports',
     icon: <FileCheck2 className="h-4 w-4" />,
     label: 'Administrative Reporting',
   },

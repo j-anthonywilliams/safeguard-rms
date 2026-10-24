@@ -101,6 +101,18 @@ export const reviewPersonnelRequest = createServerFn({method:'POST'})
  .handler(async ({data})=>{
    const user=await requireRole([...reviewers]);const customer=await getCustomerContext();const table=data.kind==='time_off'?'personnel_time_off_requests':'personnel_administrative_reports';const note=trim(data.note,5000)
    if(data.decision==='rejected'&&!note)throw new Error('Rejection reason required')
+   if(data.kind==='administrative_report') {
+     // Supervisor first; Admin/Backend perform the manager stage.
+     const stage=user.role==='supervisor'?'pending':'pending_manager'
+     const next=data.decision==='rejected'?'rejected':user.role==='supervisor'?'pending_manager':'approved'
+     const result=await getDb().query(
+       `UPDATE personnel_administrative_reports SET status=$1,reviewer_id=$2,review_note=$3,reviewed_at=now() WHERE id=$4 AND customer_id=$5 AND status=$6 RETURNING id`,
+       [next,user.id,note,data.id,customer.id,stage]
+     )
+     if(!result.rowCount)throw new Error('Report is not awaiting your approval stage')
+     await audit(customer.id,user.id,'administrative_report',data.id,`${user.role}:${data.decision}`,note)
+     return {ok:true}
+   }
    const result=await getDb().query(`UPDATE ${table} SET status=$1,reviewer_id=$2,review_note=$3,reviewed_at=now() WHERE id=$4 AND customer_id=$5 AND status='pending' RETURNING id`,[data.decision,user.id,note,data.id,customer.id]);if(!result.rowCount)throw new Error('Pending record not found')
    await audit(customer.id,user.id,data.kind,data.id,data.decision,note);return {ok:true}
  })
