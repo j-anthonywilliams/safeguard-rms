@@ -60,19 +60,24 @@ const NAV_ITEMS: NavItemDef[] = [
     active: true,
   },
   {
-    href: '/app#incidents',
+    href: '/app/incidents',
     icon: <ClipboardPlus className="h-4 w-4" />,
     label: 'Incident reports',
   },
   {
-    href: '/app#equipment',
+    href: '/app/equipment',
     icon: <Package className="h-4 w-4" />,
     label: 'Equipment desk',
   },
   {
-    href: '/app#evidence',
+    href: '/app/evidence',
     icon: <Archive className="h-4 w-4" />,
-    label: 'Property & evidence',
+    label: 'Evidence Log',
+  },
+  {
+    href: '/app/property',
+    icon: <Package className="h-4 w-4" />,
+    label: 'Property Log',
   },
   {
     href: '/app/scheduler',
@@ -245,7 +250,15 @@ export function AppSidebarShell() {
             ))}
         </div>
         {platformNavigationRole && (
-          <div className="shrink-0 border-t border-border px-2 py-3">
+          <div className="shrink-0 border-t border-border px-2 py-3 space-y-1">
+            <NavItem
+              item={{
+                href: `${import.meta.env.VITE_PLATFORM_URL || 'http://localhost:3000'}/platform-users`,
+                icon: <Users className="h-4 w-4" />,
+                label: 'Platform User Management',
+              }}
+              collapsed={collapsed}
+            />
             <NavItem
               item={{
                 href: `${import.meta.env.VITE_PLATFORM_URL || 'http://localhost:3000'}/platform-customers`,

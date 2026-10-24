@@ -256,7 +256,7 @@ function UserManagementPage() {
   const grantableRoles = useMemo(
     () =>
       ACCESS_LEVELS.filter((role) =>
-        canGrantRole(accessLevel, role)
+        role !== 'support' && role !== 'backend' && canGrantRole(accessLevel, role)
       ),
     [accessLevel]
   )

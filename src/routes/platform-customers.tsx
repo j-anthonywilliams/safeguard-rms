@@ -94,6 +94,7 @@ function PlatformCustomers() {
             SafeGuard-RMS Platform
           </h1>
           <p className="mt-2 text-muted-foreground">Customer Directory</p>
+          {mayRegister && <a href="/platform-users" className="mt-3 inline-block text-sm underline">Platform User Management</a>}
         </div>
         {mayRegister && (
           <div className="space-y-3 rounded-lg border p-4">

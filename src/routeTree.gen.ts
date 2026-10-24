@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as PlatformUsersRouteImport } from './routes/platform-users'
 import { Route as PlatformLoginRouteImport } from './routes/platform-login'
 import { Route as PlatformCustomersRouteImport } from './routes/platform-customers'
 import { Route as AppRouteImport } from './routes/app'
@@ -19,11 +20,18 @@ import { Route as AppSchedulerRouteImport } from './routes/app/scheduler'
 import { Route as AppPropertyRouteImport } from './routes/app/property'
 import { Route as AppProfileRouteImport } from './routes/app/profile'
 import { Route as AppOrganizationRouteImport } from './routes/app/organization'
+import { Route as AppIncidentsRouteImport } from './routes/app/incidents'
 import { Route as AppEvidenceRouteImport } from './routes/app/evidence'
+import { Route as AppEquipmentRouteImport } from './routes/app/equipment'
 import { Route as ApiTestRouteImport } from './routes/api/test'
 import { Route as ApiPlatformAuthSplatRouteImport } from './routes/api/platform-auth/$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
+const PlatformUsersRoute = PlatformUsersRouteImport.update({
+  id: '/platform-users',
+  path: '/platform-users',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlatformLoginRoute = PlatformLoginRouteImport.update({
   id: '/platform-login',
   path: '/platform-login',
@@ -74,9 +82,19 @@ const AppOrganizationRoute = AppOrganizationRouteImport.update({
   path: '/organization',
   getParentRoute: () => AppRoute,
 } as any)
+const AppIncidentsRoute = AppIncidentsRouteImport.update({
+  id: '/incidents',
+  path: '/incidents',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppEvidenceRoute = AppEvidenceRouteImport.update({
   id: '/evidence',
   path: '/evidence',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppEquipmentRoute = AppEquipmentRouteImport.update({
+  id: '/equipment',
+  path: '/equipment',
   getParentRoute: () => AppRoute,
 } as any)
 const ApiTestRoute = ApiTestRouteImport.update({
@@ -100,8 +118,11 @@ export interface FileRoutesByFullPath {
   '/app': typeof AppRouteWithChildren
   '/platform-customers': typeof PlatformCustomersRoute
   '/platform-login': typeof PlatformLoginRoute
+  '/platform-users': typeof PlatformUsersRoute
   '/api/test': typeof ApiTestRoute
+  '/app/equipment': typeof AppEquipmentRoute
   '/app/evidence': typeof AppEvidenceRoute
+  '/app/incidents': typeof AppIncidentsRoute
   '/app/organization': typeof AppOrganizationRoute
   '/app/profile': typeof AppProfileRoute
   '/app/property': typeof AppPropertyRoute
@@ -115,8 +136,11 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/platform-customers': typeof PlatformCustomersRoute
   '/platform-login': typeof PlatformLoginRoute
+  '/platform-users': typeof PlatformUsersRoute
   '/api/test': typeof ApiTestRoute
+  '/app/equipment': typeof AppEquipmentRoute
   '/app/evidence': typeof AppEvidenceRoute
+  '/app/incidents': typeof AppIncidentsRoute
   '/app/organization': typeof AppOrganizationRoute
   '/app/profile': typeof AppProfileRoute
   '/app/property': typeof AppPropertyRoute
@@ -132,8 +156,11 @@ export interface FileRoutesById {
   '/app': typeof AppRouteWithChildren
   '/platform-customers': typeof PlatformCustomersRoute
   '/platform-login': typeof PlatformLoginRoute
+  '/platform-users': typeof PlatformUsersRoute
   '/api/test': typeof ApiTestRoute
+  '/app/equipment': typeof AppEquipmentRoute
   '/app/evidence': typeof AppEvidenceRoute
+  '/app/incidents': typeof AppIncidentsRoute
   '/app/organization': typeof AppOrganizationRoute
   '/app/profile': typeof AppProfileRoute
   '/app/property': typeof AppPropertyRoute
@@ -150,8 +177,11 @@ export interface FileRouteTypes {
     | '/app'
     | '/platform-customers'
     | '/platform-login'
+    | '/platform-users'
     | '/api/test'
+    | '/app/equipment'
     | '/app/evidence'
+    | '/app/incidents'
     | '/app/organization'
     | '/app/profile'
     | '/app/property'
@@ -165,8 +195,11 @@ export interface FileRouteTypes {
     | '/'
     | '/platform-customers'
     | '/platform-login'
+    | '/platform-users'
     | '/api/test'
+    | '/app/equipment'
     | '/app/evidence'
+    | '/app/incidents'
     | '/app/organization'
     | '/app/profile'
     | '/app/property'
@@ -181,8 +214,11 @@ export interface FileRouteTypes {
     | '/app'
     | '/platform-customers'
     | '/platform-login'
+    | '/platform-users'
     | '/api/test'
+    | '/app/equipment'
     | '/app/evidence'
+    | '/app/incidents'
     | '/app/organization'
     | '/app/profile'
     | '/app/property'
@@ -198,6 +234,7 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   PlatformCustomersRoute: typeof PlatformCustomersRoute
   PlatformLoginRoute: typeof PlatformLoginRoute
+  PlatformUsersRoute: typeof PlatformUsersRoute
   ApiTestRoute: typeof ApiTestRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiPlatformAuthSplatRoute: typeof ApiPlatformAuthSplatRoute
@@ -205,6 +242,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/platform-users': {
+      id: '/platform-users'
+      path: '/platform-users'
+      fullPath: '/platform-users'
+      preLoaderRoute: typeof PlatformUsersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/platform-login': {
       id: '/platform-login'
       path: '/platform-login'
@@ -275,11 +319,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOrganizationRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/incidents': {
+      id: '/app/incidents'
+      path: '/incidents'
+      fullPath: '/app/incidents'
+      preLoaderRoute: typeof AppIncidentsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/evidence': {
       id: '/app/evidence'
       path: '/evidence'
       fullPath: '/app/evidence'
       preLoaderRoute: typeof AppEvidenceRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/equipment': {
+      id: '/app/equipment'
+      path: '/equipment'
+      fullPath: '/app/equipment'
+      preLoaderRoute: typeof AppEquipmentRouteImport
       parentRoute: typeof AppRoute
     }
     '/api/test': {
@@ -307,7 +365,9 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppEquipmentRoute: typeof AppEquipmentRoute
   AppEvidenceRoute: typeof AppEvidenceRoute
+  AppIncidentsRoute: typeof AppIncidentsRoute
   AppOrganizationRoute: typeof AppOrganizationRoute
   AppProfileRoute: typeof AppProfileRoute
   AppPropertyRoute: typeof AppPropertyRoute
@@ -317,7 +377,9 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppEquipmentRoute: AppEquipmentRoute,
   AppEvidenceRoute: AppEvidenceRoute,
+  AppIncidentsRoute: AppIncidentsRoute,
   AppOrganizationRoute: AppOrganizationRoute,
   AppProfileRoute: AppProfileRoute,
   AppPropertyRoute: AppPropertyRoute,
@@ -333,6 +395,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   PlatformCustomersRoute: PlatformCustomersRoute,
   PlatformLoginRoute: PlatformLoginRoute,
+  PlatformUsersRoute: PlatformUsersRoute,
   ApiTestRoute: ApiTestRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiPlatformAuthSplatRoute: ApiPlatformAuthSplatRoute,
