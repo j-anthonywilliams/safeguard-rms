@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "start": "node .vite-out/server/server.js",
+    "build": "vite build && node scripts/finalize-static-build.mjs",
+    "start": "srvx --prod -s ../../dist .vite-out/server/server.js",
     "preview": "vite preview",
     "lint:css": "stylelint \"src/**/*.css\" --fix --quiet",
     "lint:js": "eslint . --ext ts,tsx --report-unused-disable-directives",
