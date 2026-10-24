@@ -17,15 +17,18 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppUsersRouteImport } from './routes/app/users'
 import { Route as AppTrainingPreviewRouteImport } from './routes/app/training-preview'
+import { Route as AppTrainingRouteImport } from './routes/app/training'
 import { Route as AppSchedulerRouteImport } from './routes/app/scheduler'
 import { Route as AppPropertyRouteImport } from './routes/app/property'
 import { Route as AppProfileRouteImport } from './routes/app/profile'
 import { Route as AppOrganizationRouteImport } from './routes/app/organization'
+import { Route as AppOnboardingRouteImport } from './routes/app/onboarding'
 import { Route as AppIncidentsRouteImport } from './routes/app/incidents'
 import { Route as AppEvidenceRouteImport } from './routes/app/evidence'
 import { Route as AppEquipmentRouteImport } from './routes/app/equipment'
 import { Route as AppCasesRouteImport } from './routes/app/cases'
 import { Route as AppAdministrativeReportsPreviewRouteImport } from './routes/app/administrative-reports-preview'
+import { Route as AppAdministrativeReportsRouteImport } from './routes/app/administrative-reports'
 import { Route as ApiTestRouteImport } from './routes/api/test'
 import { Route as ApiPlatformAuthSplatRouteImport } from './routes/api/platform-auth/$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -70,6 +73,11 @@ const AppTrainingPreviewRoute = AppTrainingPreviewRouteImport.update({
   path: '/training-preview',
   getParentRoute: () => AppRoute,
 } as any)
+const AppTrainingRoute = AppTrainingRouteImport.update({
+  id: '/training',
+  path: '/training',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSchedulerRoute = AppSchedulerRouteImport.update({
   id: '/scheduler',
   path: '/scheduler',
@@ -88,6 +96,11 @@ const AppProfileRoute = AppProfileRouteImport.update({
 const AppOrganizationRoute = AppOrganizationRouteImport.update({
   id: '/organization',
   path: '/organization',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppOnboardingRoute = AppOnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
   getParentRoute: () => AppRoute,
 } as any)
 const AppIncidentsRoute = AppIncidentsRouteImport.update({
@@ -116,6 +129,12 @@ const AppAdministrativeReportsPreviewRoute =
     path: '/administrative-reports-preview',
     getParentRoute: () => AppRoute,
   } as any)
+const AppAdministrativeReportsRoute =
+  AppAdministrativeReportsRouteImport.update({
+    id: '/administrative-reports',
+    path: '/administrative-reports',
+    getParentRoute: () => AppRoute,
+  } as any)
 const ApiTestRoute = ApiTestRouteImport.update({
   id: '/api/test',
   path: '/api/test',
@@ -139,15 +158,18 @@ export interface FileRoutesByFullPath {
   '/platform-login': typeof PlatformLoginRoute
   '/platform-users': typeof PlatformUsersRoute
   '/api/test': typeof ApiTestRoute
+  '/app/administrative-reports': typeof AppAdministrativeReportsRoute
   '/app/administrative-reports-preview': typeof AppAdministrativeReportsPreviewRoute
   '/app/cases': typeof AppCasesRoute
   '/app/equipment': typeof AppEquipmentRoute
   '/app/evidence': typeof AppEvidenceRoute
   '/app/incidents': typeof AppIncidentsRoute
+  '/app/onboarding': typeof AppOnboardingRoute
   '/app/organization': typeof AppOrganizationRoute
   '/app/profile': typeof AppProfileRoute
   '/app/property': typeof AppPropertyRoute
   '/app/scheduler': typeof AppSchedulerRoute
+  '/app/training': typeof AppTrainingRoute
   '/app/training-preview': typeof AppTrainingPreviewRoute
   '/app/users': typeof AppUsersRoute
   '/app/': typeof AppIndexRoute
@@ -160,15 +182,18 @@ export interface FileRoutesByTo {
   '/platform-login': typeof PlatformLoginRoute
   '/platform-users': typeof PlatformUsersRoute
   '/api/test': typeof ApiTestRoute
+  '/app/administrative-reports': typeof AppAdministrativeReportsRoute
   '/app/administrative-reports-preview': typeof AppAdministrativeReportsPreviewRoute
   '/app/cases': typeof AppCasesRoute
   '/app/equipment': typeof AppEquipmentRoute
   '/app/evidence': typeof AppEvidenceRoute
   '/app/incidents': typeof AppIncidentsRoute
+  '/app/onboarding': typeof AppOnboardingRoute
   '/app/organization': typeof AppOrganizationRoute
   '/app/profile': typeof AppProfileRoute
   '/app/property': typeof AppPropertyRoute
   '/app/scheduler': typeof AppSchedulerRoute
+  '/app/training': typeof AppTrainingRoute
   '/app/training-preview': typeof AppTrainingPreviewRoute
   '/app/users': typeof AppUsersRoute
   '/app': typeof AppIndexRoute
@@ -183,15 +208,18 @@ export interface FileRoutesById {
   '/platform-login': typeof PlatformLoginRoute
   '/platform-users': typeof PlatformUsersRoute
   '/api/test': typeof ApiTestRoute
+  '/app/administrative-reports': typeof AppAdministrativeReportsRoute
   '/app/administrative-reports-preview': typeof AppAdministrativeReportsPreviewRoute
   '/app/cases': typeof AppCasesRoute
   '/app/equipment': typeof AppEquipmentRoute
   '/app/evidence': typeof AppEvidenceRoute
   '/app/incidents': typeof AppIncidentsRoute
+  '/app/onboarding': typeof AppOnboardingRoute
   '/app/organization': typeof AppOrganizationRoute
   '/app/profile': typeof AppProfileRoute
   '/app/property': typeof AppPropertyRoute
   '/app/scheduler': typeof AppSchedulerRoute
+  '/app/training': typeof AppTrainingRoute
   '/app/training-preview': typeof AppTrainingPreviewRoute
   '/app/users': typeof AppUsersRoute
   '/app/': typeof AppIndexRoute
@@ -207,15 +235,18 @@ export interface FileRouteTypes {
     | '/platform-login'
     | '/platform-users'
     | '/api/test'
+    | '/app/administrative-reports'
     | '/app/administrative-reports-preview'
     | '/app/cases'
     | '/app/equipment'
     | '/app/evidence'
     | '/app/incidents'
+    | '/app/onboarding'
     | '/app/organization'
     | '/app/profile'
     | '/app/property'
     | '/app/scheduler'
+    | '/app/training'
     | '/app/training-preview'
     | '/app/users'
     | '/app/'
@@ -228,15 +259,18 @@ export interface FileRouteTypes {
     | '/platform-login'
     | '/platform-users'
     | '/api/test'
+    | '/app/administrative-reports'
     | '/app/administrative-reports-preview'
     | '/app/cases'
     | '/app/equipment'
     | '/app/evidence'
     | '/app/incidents'
+    | '/app/onboarding'
     | '/app/organization'
     | '/app/profile'
     | '/app/property'
     | '/app/scheduler'
+    | '/app/training'
     | '/app/training-preview'
     | '/app/users'
     | '/app'
@@ -250,15 +284,18 @@ export interface FileRouteTypes {
     | '/platform-login'
     | '/platform-users'
     | '/api/test'
+    | '/app/administrative-reports'
     | '/app/administrative-reports-preview'
     | '/app/cases'
     | '/app/equipment'
     | '/app/evidence'
     | '/app/incidents'
+    | '/app/onboarding'
     | '/app/organization'
     | '/app/profile'
     | '/app/property'
     | '/app/scheduler'
+    | '/app/training'
     | '/app/training-preview'
     | '/app/users'
     | '/app/'
@@ -335,6 +372,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTrainingPreviewRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/training': {
+      id: '/app/training'
+      path: '/training'
+      fullPath: '/app/training'
+      preLoaderRoute: typeof AppTrainingRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/scheduler': {
       id: '/app/scheduler'
       path: '/scheduler'
@@ -361,6 +405,13 @@ declare module '@tanstack/react-router' {
       path: '/organization'
       fullPath: '/app/organization'
       preLoaderRoute: typeof AppOrganizationRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/onboarding': {
+      id: '/app/onboarding'
+      path: '/onboarding'
+      fullPath: '/app/onboarding'
+      preLoaderRoute: typeof AppOnboardingRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/incidents': {
@@ -398,6 +449,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdministrativeReportsPreviewRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/administrative-reports': {
+      id: '/app/administrative-reports'
+      path: '/administrative-reports'
+      fullPath: '/app/administrative-reports'
+      preLoaderRoute: typeof AppAdministrativeReportsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/api/test': {
       id: '/api/test'
       path: '/api/test'
@@ -423,30 +481,36 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppAdministrativeReportsRoute: typeof AppAdministrativeReportsRoute
   AppAdministrativeReportsPreviewRoute: typeof AppAdministrativeReportsPreviewRoute
   AppCasesRoute: typeof AppCasesRoute
   AppEquipmentRoute: typeof AppEquipmentRoute
   AppEvidenceRoute: typeof AppEvidenceRoute
   AppIncidentsRoute: typeof AppIncidentsRoute
+  AppOnboardingRoute: typeof AppOnboardingRoute
   AppOrganizationRoute: typeof AppOrganizationRoute
   AppProfileRoute: typeof AppProfileRoute
   AppPropertyRoute: typeof AppPropertyRoute
   AppSchedulerRoute: typeof AppSchedulerRoute
+  AppTrainingRoute: typeof AppTrainingRoute
   AppTrainingPreviewRoute: typeof AppTrainingPreviewRoute
   AppUsersRoute: typeof AppUsersRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAdministrativeReportsRoute: AppAdministrativeReportsRoute,
   AppAdministrativeReportsPreviewRoute: AppAdministrativeReportsPreviewRoute,
   AppCasesRoute: AppCasesRoute,
   AppEquipmentRoute: AppEquipmentRoute,
   AppEvidenceRoute: AppEvidenceRoute,
   AppIncidentsRoute: AppIncidentsRoute,
+  AppOnboardingRoute: AppOnboardingRoute,
   AppOrganizationRoute: AppOrganizationRoute,
   AppProfileRoute: AppProfileRoute,
   AppPropertyRoute: AppPropertyRoute,
   AppSchedulerRoute: AppSchedulerRoute,
+  AppTrainingRoute: AppTrainingRoute,
   AppTrainingPreviewRoute: AppTrainingPreviewRoute,
   AppUsersRoute: AppUsersRoute,
   AppIndexRoute: AppIndexRoute,

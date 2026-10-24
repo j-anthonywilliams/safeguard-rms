@@ -1,0 +1,15 @@
+import { useEffect, useState } from 'react'
+import { createFileRoute } from '@tanstack/react-router'
+import { getPersonnelWorkspace,addCandidate,addOnboardingStep,completeOnboardingStep } from '@/lib/personnel-workflows.functions'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+export const Route=createFileRoute('/app/onboarding')({component:OnboardingPage})
+type Data=Awaited<ReturnType<typeof getPersonnelWorkspace>>
+function OnboardingPage(){const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[name,setName]=useState(''),[email,setEmail]=useState(''),[candidateId,setCandidateId]=useState(''),[step,setStep]=useState('')
+ const load=async()=>{try{setData(await getPersonnelWorkspace());setError('')}catch(e){setError(String(e))}};useEffect(()=>{void load()},[])
+ const manager=data&&['office_staff','admin','backend'].includes(data.role)
+ const run=async(fn:()=>Promise<unknown>)=>{try{await fn();await load()}catch(e){setError(String(e))}}
+ return <main className="mx-auto max-w-5xl space-y-6 p-6"><h1 className="text-2xl font-semibold">Candidate Onboarding</h1>{error&&<p role="alert" className="text-destructive">{error}</p>}
+ {manager&&<section className="space-y-3 rounded-lg border p-4"><h2 className="font-semibold">Add Candidate</h2><p className="text-sm text-muted-foreground">Creates an unassigned, archived identity. Activation and offers require separate authorization.</p><Input placeholder="Full name" value={name} onChange={e=>setName(e.target.value)}/><Input placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)}/><Button onClick={()=>void run(async()=>{await addCandidate({data:{fullName:name,email}});setName('');setEmail('')})}>Create Candidate</Button></section>}
+ {manager&&<section className="space-y-2 rounded-lg border p-4"><h2 className="font-semibold">Add Onboarding Requirement</h2><select className="rounded border p-2" value={candidateId} onChange={e=>setCandidateId(e.target.value)}><option value="">Choose candidate</option>{data?.candidates.map(c=><option key={c.id} value={c.id}>{c.fullName}</option>)}</select><Input placeholder="Requirement" value={step} onChange={e=>setStep(e.target.value)}/><Button disabled={!candidateId||!step.trim()} onClick={()=>void run(async()=>{await addOnboardingStep({data:{candidateId,title:step}});setStep('')})}>Add Requirement</Button></section>}
+ <section className="space-y-4">{data?.candidates.map(c=>{const steps=data.steps.filter(s=>s.candidateId===c.id);const complete=steps.filter(s=>s.completedAt).length;return <div key={c.id} className="rounded-lg border p-4"><h2 className="font-semibold">{c.fullName} — {c.stage}</h2><p className="text-sm text-muted-foreground">{complete} of {steps.length} requirements completed</p><div className="mt-2 space-y-2">{steps.map(s=><div key={s.id} className="flex items-center justify-between border-t py-2 text-sm"><span>{s.title} · {s.completedAt?'Complete':'Pending'}</span>{manager&&!s.completedAt&&<Button size="sm" onClick={()=>void run(()=>completeOnboardingStep({data:{stepId:s.id}}))}>Verify</Button>}</div>)}</div></div>})}</section></main>}
