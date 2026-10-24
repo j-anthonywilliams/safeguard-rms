@@ -23,6 +23,7 @@ import { Route as AppOrganizationRouteImport } from './routes/app/organization'
 import { Route as AppIncidentsRouteImport } from './routes/app/incidents'
 import { Route as AppEvidenceRouteImport } from './routes/app/evidence'
 import { Route as AppEquipmentRouteImport } from './routes/app/equipment'
+import { Route as AppCasesRouteImport } from './routes/app/cases'
 import { Route as ApiTestRouteImport } from './routes/api/test'
 import { Route as ApiPlatformAuthSplatRouteImport } from './routes/api/platform-auth/$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -97,6 +98,11 @@ const AppEquipmentRoute = AppEquipmentRouteImport.update({
   path: '/equipment',
   getParentRoute: () => AppRoute,
 } as any)
+const AppCasesRoute = AppCasesRouteImport.update({
+  id: '/cases',
+  path: '/cases',
+  getParentRoute: () => AppRoute,
+} as any)
 const ApiTestRoute = ApiTestRouteImport.update({
   id: '/api/test',
   path: '/api/test',
@@ -120,6 +126,7 @@ export interface FileRoutesByFullPath {
   '/platform-login': typeof PlatformLoginRoute
   '/platform-users': typeof PlatformUsersRoute
   '/api/test': typeof ApiTestRoute
+  '/app/cases': typeof AppCasesRoute
   '/app/equipment': typeof AppEquipmentRoute
   '/app/evidence': typeof AppEvidenceRoute
   '/app/incidents': typeof AppIncidentsRoute
@@ -138,6 +145,7 @@ export interface FileRoutesByTo {
   '/platform-login': typeof PlatformLoginRoute
   '/platform-users': typeof PlatformUsersRoute
   '/api/test': typeof ApiTestRoute
+  '/app/cases': typeof AppCasesRoute
   '/app/equipment': typeof AppEquipmentRoute
   '/app/evidence': typeof AppEvidenceRoute
   '/app/incidents': typeof AppIncidentsRoute
@@ -158,6 +166,7 @@ export interface FileRoutesById {
   '/platform-login': typeof PlatformLoginRoute
   '/platform-users': typeof PlatformUsersRoute
   '/api/test': typeof ApiTestRoute
+  '/app/cases': typeof AppCasesRoute
   '/app/equipment': typeof AppEquipmentRoute
   '/app/evidence': typeof AppEvidenceRoute
   '/app/incidents': typeof AppIncidentsRoute
@@ -179,6 +188,7 @@ export interface FileRouteTypes {
     | '/platform-login'
     | '/platform-users'
     | '/api/test'
+    | '/app/cases'
     | '/app/equipment'
     | '/app/evidence'
     | '/app/incidents'
@@ -197,6 +207,7 @@ export interface FileRouteTypes {
     | '/platform-login'
     | '/platform-users'
     | '/api/test'
+    | '/app/cases'
     | '/app/equipment'
     | '/app/evidence'
     | '/app/incidents'
@@ -216,6 +227,7 @@ export interface FileRouteTypes {
     | '/platform-login'
     | '/platform-users'
     | '/api/test'
+    | '/app/cases'
     | '/app/equipment'
     | '/app/evidence'
     | '/app/incidents'
@@ -340,6 +352,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppEquipmentRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/cases': {
+      id: '/app/cases'
+      path: '/cases'
+      fullPath: '/app/cases'
+      preLoaderRoute: typeof AppCasesRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/api/test': {
       id: '/api/test'
       path: '/api/test'
@@ -365,6 +384,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppCasesRoute: typeof AppCasesRoute
   AppEquipmentRoute: typeof AppEquipmentRoute
   AppEvidenceRoute: typeof AppEvidenceRoute
   AppIncidentsRoute: typeof AppIncidentsRoute
@@ -377,6 +397,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppCasesRoute: AppCasesRoute,
   AppEquipmentRoute: AppEquipmentRoute,
   AppEvidenceRoute: AppEvidenceRoute,
   AppIncidentsRoute: AppIncidentsRoute,

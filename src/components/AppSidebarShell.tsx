@@ -65,6 +65,11 @@ const NAV_ITEMS: NavItemDef[] = [
     label: 'Incident reports',
   },
   {
+    href: '/app/cases',
+    icon: <Archive className="h-4 w-4" />,
+    label: 'Case Files',
+  },
+  {
     href: '/app/equipment',
     icon: <Package className="h-4 w-4" />,
     label: 'Equipment desk',
