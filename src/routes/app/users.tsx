@@ -301,11 +301,19 @@ function UserManagementPage() {
     }
   }
 
-  const sendLoginLink = async (_email: string) => {
-    toast.info('Login links are not configured yet', {
-      description:
-        'Users can sign in through Google. Email login links will be available after email delivery is configured.',
-    })
+  const copyInvitationSignIn = async (email: string) => {
+    // This is a sign-in URL, not a bearer token. The recipient must still
+    // authenticate using their own verified, invited email address.
+    const signInUrl = new URL('/app', window.location.origin).toString()
+    const message = `You have been invited to SafeGuard-RMS as ${email}.\nSign in using this email address: ${signInUrl}`
+    try {
+      await navigator.clipboard.writeText(message)
+      toast.success('Sign-in instructions copied', {
+        description: 'Send them to the invited employee using your approved communication channel.',
+      })
+    } catch {
+      toast.error('Could not copy sign-in instructions')
+    }
   }
 
   const updateRole = async (
@@ -701,8 +709,8 @@ function UserManagementPage() {
                 >
                   <LogIn className="size-4" />
                   {busy
-                    ? 'Sending invitation…'
-                    : 'Create & send login link'}
+                    ? 'Creating invitation…'
+                    : 'Create invitation'}
                 </Button>
               </div>
             </CardContent>
@@ -890,7 +898,11 @@ function UserManagementPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => sendLoginLink(item.email)}
+                                onClick={() => {
+                                  const instructions = `Sign in to SafeGuard-RMS using ${item.email} at ${window.location.origin}/login`
+                                  navigator.clipboard.writeText(instructions)
+                                  toast.success('Sign-in instructions copied')
+}}
                                 disabled={busy}
                               >
                                 <LogIn className="size-3.5" />
@@ -1011,8 +1023,7 @@ function UserManagementPage() {
             <CardHeader>
               <CardTitle>Pending invitations</CardTitle>
               <CardDescription>
-                Users who have been invited but are not yet
-                present in the SafeGuard directory.
+                Pending employee invitations. Copy sign-in instructions to share manually; email delivery is not configured.
               </CardDescription>
             </CardHeader>
 
@@ -1045,14 +1056,14 @@ function UserManagementPage() {
                         size="sm"
                         variant="outline"
                         onClick={() =>
-                          sendLoginLink(
+                          copyInvitationSignIn(
                             invitation.email
                           )
                         }
                         disabled={busy}
                       >
                         <LogIn className="size-3.5" />
-                        Resend link
+                        Copy sign-in instructions
                       </Button>
 
                       <Button

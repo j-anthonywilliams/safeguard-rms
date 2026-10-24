@@ -112,7 +112,7 @@ function PlatformCustomers() {
                 setRegistrationMessage(null)
                 try {
                   await registerPlatformCustomer({ data: { customerCode, name: customerName, websiteSlug } })
-                  setRegistrationMessage('Customer registered as inactive. Provisioning required.')
+                  setRegistrationMessage('Customer registered successfully.')
                   setCustomerCode(''); setCustomerName(''); setWebsiteSlug('')
                   setShowRegistration(false)
                 } catch (err) {

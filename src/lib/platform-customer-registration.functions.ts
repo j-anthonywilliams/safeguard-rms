@@ -26,8 +26,8 @@ export const registerPlatformCustomer = createServerFn({ method: 'POST' })
     }
     const result = await getPlatformDb().query<{ id: string }>(
       `INSERT INTO platform_customers (id, customer_code, name, website_slug, status)
-       VALUES ($1, $2, $3, $4, 'inactive') RETURNING id`,
+       VALUES ($1, $2, $3, $4, 'active') RETURNING id`,
       [crypto.randomUUID(), customerCode, name, websiteSlug],
     )
-    return { id: result.rows[0].id, status: 'inactive' as const }
+    return { id: result.rows[0].id, status: 'active' as const }
   })
