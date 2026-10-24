@@ -69,6 +69,11 @@ function createPlatformAuth() {
       enabled: true,
     },
 
+    trustedOrigins: [
+      'http://localhost:3000',
+      'http://localhost:3001',
+    ],
+    
     socialProviders:
       googleClientId && googleClientSecret
         ? {

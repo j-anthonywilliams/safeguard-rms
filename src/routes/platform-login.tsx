@@ -1,5 +1,5 @@
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +15,15 @@ export const Route = createFileRoute('/platform-login')({
 })
 
 function PlatformLogin() {
+  // Global authentication belongs to the central platform, never a customer app.
+  useEffect(() => {
+    const platformOrigin = import.meta.env.VITE_PLATFORM_URL || 'http://localhost:3000'
+    const destination = new URL('/platform-login', platformOrigin)
+    if (window.location.origin !== destination.origin) {
+      destination.search = window.location.search
+      window.location.replace(destination.toString())
+    }
+  }, [])
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
@@ -106,6 +115,11 @@ function PlatformLogin() {
       setError(err instanceof Error ? err.message : 'Google sign-in failed')
       setBusy(false)
     }
+  }
+
+  const platformOrigin = import.meta.env.VITE_PLATFORM_URL || 'http://localhost:3000'
+  if (typeof window !== 'undefined' && window.location.origin !== new URL(platformOrigin).origin) {
+    return <main className="p-6 text-sm">Redirecting to platform sign-in...</main>
   }
 
   return (
