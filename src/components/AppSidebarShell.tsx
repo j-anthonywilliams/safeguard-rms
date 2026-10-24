@@ -32,6 +32,8 @@ import {
   Building2,
   CalendarDays,
   ClipboardPlus,
+  GraduationCap,
+  FileCheck2,
   LayoutDashboard,
   Package,
   PanelLeft,
@@ -88,6 +90,16 @@ const NAV_ITEMS: NavItemDef[] = [
     href: '/app/scheduler',
     icon: <CalendarDays className="h-4 w-4" />,
     label: 'Scheduler',
+  },
+  {
+    href: '/app/training-preview',
+    icon: <GraduationCap className="h-4 w-4" />,
+    label: 'Training & Onboarding',
+  },
+  {
+    href: '/app/administrative-reports-preview',
+    icon: <FileCheck2 className="h-4 w-4" />,
+    label: 'Administrative Reporting',
   },
   {
     href: '/app/users',

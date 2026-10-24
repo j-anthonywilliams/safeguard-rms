@@ -11,6 +11,14 @@ export const DEV_ROLES: DevRole[] = [
     label: 'User',
   },
   {
+    role: 'investigator',
+    label: 'Investigator',
+  },
+  {
+    role: 'office_staff',
+    label: 'Office Staff',
+  },
+  {
     role: 'supervisor',
     label: 'Supervisor',
   },
