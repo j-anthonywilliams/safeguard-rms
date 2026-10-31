@@ -24,10 +24,44 @@ export const getPersonnelWorkspace = createServerFn({method:'GET'}).handler(asyn
     db.query<{id:string;classId:string;userId:string;status:string}>(`SELECT id,class_id AS "classId",user_id AS "userId",status FROM personnel_training_assignments WHERE customer_id=$1 AND ($2 OR user_id=$3) ORDER BY assigned_at DESC LIMIT 500`,[customer.id,manager,user.id]),
     db.query<{id:string;userId:string;fullName:string;email:string;stage:string}>(`SELECT id,user_id AS "userId",full_name AS "fullName",email,stage FROM personnel_candidates WHERE customer_id=$1 AND ($2 OR user_id=$3) ORDER BY created_at DESC LIMIT 200`,[customer.id,manager,user.id]),
     db.query<{id:string;candidateId:string;title:string;completedAt:string|null}>(`SELECT s.id,s.candidate_id AS "candidateId",s.title,s.completed_at AS "completedAt" FROM personnel_onboarding_steps s JOIN personnel_candidates c ON c.id=s.candidate_id AND c.customer_id=s.customer_id WHERE s.customer_id=$1 AND ($2 OR c.user_id=$3) ORDER BY s.created_at LIMIT 500`,[customer.id,manager,user.id]),
-    db.query<{id:string;title:string;narrative:string;status:string;authorId:string;subjectUserId:string|null}>(`SELECT id,title,narrative,status,author_id AS "authorId",subject_user_id AS "subjectUserId" FROM personnel_administrative_reports WHERE customer_id=$1 AND ($2 OR author_id=$3) ORDER BY created_at DESC LIMIT 200`,[customer.id,manager,user.id]),
+    db.query<{id:string;title:string;narrative:string;status:string;authorId:string;subjectUserId:string|null;incidentDate:string|null;reportReason:string;otherReason:string;incidentLocation:string;involvedPerson:string;witnesses:string;actionsTaken:string;incidentId:string|null}>(`SELECT id,title,narrative,status,author_id AS "authorId",subject_user_id AS "subjectUserId",incident_date AS "incidentDate",report_reason AS "reportReason",other_reason AS "otherReason",incident_location AS "incidentLocation",involved_person AS "involvedPerson",witnesses,actions_taken AS "actionsTaken",incident_id AS "incidentId" FROM personnel_administrative_reports WHERE customer_id=$1 AND ($2 OR author_id=$3) ORDER BY created_at DESC LIMIT 200`,[customer.id,manager,user.id]),
     db.query<{id:string;userId:string;startDate:string;endDate:string;reason:string;status:string}>(`SELECT id,user_id AS "userId",start_date::text AS "startDate",end_date::text AS "endDate",reason,status FROM personnel_time_off_requests WHERE customer_id=$1 AND ($2 OR user_id=$3) ORDER BY created_at DESC LIMIT 200`,[customer.id,reviewer,user.id]),
   ])
   return {role:user.role,userId:user.id,classes:classes.rows,assignments:assignments.rows,candidates:candidates.rows,steps:steps.rows,reports:reports.rows,timeOff:timeOff.rows}
+})
+
+// Customer-scoped employees available for training assignment.
+export const getTrainingAssignableUsers = createServerFn({method:'GET'}).handler(async () => {
+  await requireRole([...managers])
+  const customer = await getCustomerContext()
+  const result = await getDb().query<{id:string;displayName:string;email:string}>(`
+    SELECT DISTINCT u.id, u.display_name AS "displayName", u.email
+    FROM users u
+    WHERE COALESCE(u.is_archived,0)=0
+      AND (
+        EXISTS (SELECT 1 FROM user_customer_assignments a WHERE a.user_id=u.id AND a.customer_id=$1)
+        OR EXISTS (SELECT 1 FROM user_client_assignments a WHERE a.user_id=u.id AND a.customer_id=$1)
+        OR EXISTS (SELECT 1 FROM user_site_assignments a WHERE a.user_id=u.id AND a.customer_id=$1)
+      )
+    ORDER BY "displayName",u.email
+    LIMIT 500`,[customer.id])
+  return result.rows
+})
+
+// Only incident reports the caller is permitted to reference are selectable.
+export const getAdministrativeIncidentOptions = createServerFn({method:'GET'}).handler(async () => {
+  const user=await requireRole([...managers]);const customer=await getCustomerContext()
+  const result=await getDb().query<{id:string;reportNumber:string;incidentDate:string}>(`
+    SELECT i.id,i.report_number AS "reportNumber",i.incident_date AS "incidentDate"
+    FROM incidents i WHERE i.customer_id=$1 AND (
+      i.user_id=$2 OR $3 IN ('admin','backend')
+      OR ($3='supervisor' AND (
+        EXISTS(SELECT 1 FROM user_customer_assignments a WHERE a.customer_id=$1 AND a.user_id=$2)
+        OR EXISTS(SELECT 1 FROM user_client_assignments a WHERE a.customer_id=$1 AND a.user_id=$2 AND a.client_id=i.client_id)
+        OR EXISTS(SELECT 1 FROM user_site_assignments a WHERE a.customer_id=$1 AND a.user_id=$2 AND a.site_id=i.site_id AND a.client_id=i.client_id)
+      ))
+    ) ORDER BY i.created_at DESC LIMIT 200`,[customer.id,user.id,user.role])
+  return result.rows
 })
 
 export const createTrainingClass = createServerFn({method:'POST'})
@@ -46,7 +80,7 @@ export const assignTraining = createServerFn({method:'POST'})
  .inputValidator((data:{classId:string;userId:string})=>data)
  .handler(async ({data})=>{
    const user=await requireRole([...managers]);const customer=await getCustomerContext();const db=getDb()
-   const result=await db.query(`INSERT INTO personnel_training_assignments (id,customer_id,class_id,user_id) SELECT $1,$2,c.id,u.id FROM personnel_training_classes c JOIN users u ON u.id=$4 AND COALESCE(u.is_archived,0)=0 WHERE c.id=$3 AND c.customer_id=$2 ON CONFLICT(customer_id,class_id,user_id) DO NOTHING RETURNING id`,[id(),customer.id,data.classId,data.userId]);if(!result.rowCount) throw new Error('Assignment unavailable or already exists')
+   const result=await db.query(`INSERT INTO personnel_training_assignments (id,customer_id,class_id,user_id) SELECT $1,$2,c.id,u.id FROM personnel_training_classes c JOIN users u ON u.id=$4 AND COALESCE(u.is_archived,0)=0 WHERE c.id=$3 AND c.customer_id=$2 AND (EXISTS(SELECT 1 FROM user_customer_assignments a WHERE a.user_id=u.id AND a.customer_id=$2) OR EXISTS(SELECT 1 FROM user_client_assignments a WHERE a.user_id=u.id AND a.customer_id=$2) OR EXISTS(SELECT 1 FROM user_site_assignments a WHERE a.user_id=u.id AND a.customer_id=$2)) ON CONFLICT(customer_id,class_id,user_id) DO NOTHING RETURNING id`,[id(),customer.id,data.classId,data.userId]);if(!result.rowCount) throw new Error('Assignment unavailable or already exists')
    await audit(customer.id,user.id,'training_class',data.classId,'assigned',data.userId);return {ok:true}
  })
 
@@ -140,11 +174,22 @@ export const completeOnboardingStep = createServerFn({method:'POST'})
  })
 
 export const createAdministrativeReport = createServerFn({method:'POST'})
- .inputValidator((data:{title:string;narrative:string;subjectUserId:string|null})=>data)
+ .inputValidator((data:{title:string;narrative:string;subjectUserId:string|null;incidentDate:string|null;reportReason:string;otherReason:string;incidentLocation:string;involvedPerson:string;witnesses:string;actionsTaken:string;incidentId:string|null})=>data)
  .handler(async ({data})=>{
-   const user=await requireRole([...managers]);const customer=await getCustomerContext();const title=trim(data.title,180);const narrative=trim(data.narrative,30000)
+   const user=await requireRole([...managers]);const customer=await getCustomerContext();const db=getDb()
+   const title=trim(data.title,180),narrative=trim(data.narrative,30000)
+   const reasons=['administrative','injured_on_duty','use_of_force','lost_department_property','damaged_department_property','lost_citizen_property','damaged_citizen_property','department_vehicle_accident','other']
    if(!title||!narrative)throw new Error('Title and narrative required')
-   const key=id();await getDb().query(`INSERT INTO personnel_administrative_reports (id,customer_id,subject_user_id,author_id,title,narrative) VALUES ($1,$2,$3,$4,$5,$6)`,[key,customer.id,data.subjectUserId||null,user.id,title,narrative]);await audit(customer.id,user.id,'administrative_report',key,'submitted');return {id:key}
+   if(!reasons.includes(data.reportReason))throw new Error('Invalid report reason')
+   if(data.reportReason==='other'&&!trim(data.otherReason,500))throw new Error('Specify the other reason')
+   if(data.incidentDate && !/^\d{4}-\d{2}-\d{2}$/.test(data.incidentDate))throw new Error('Invalid incident date')
+   if(data.incidentId){
+     const allowed=await db.query(`SELECT 1 FROM incidents i WHERE i.id=$1 AND i.customer_id=$2 AND (i.user_id=$3 OR $4 IN ('admin','backend') OR ($4='supervisor' AND (EXISTS(SELECT 1 FROM user_customer_assignments a WHERE a.customer_id=$2 AND a.user_id=$3) OR EXISTS(SELECT 1 FROM user_client_assignments a WHERE a.customer_id=$2 AND a.user_id=$3 AND a.client_id=i.client_id) OR EXISTS(SELECT 1 FROM user_site_assignments a WHERE a.customer_id=$2 AND a.user_id=$3 AND a.site_id=i.site_id AND a.client_id=i.client_id))))`,[data.incidentId,customer.id,user.id,user.role])
+     if(!allowed.rowCount)throw new Error('Incident report is not available to associate')
+   }
+   const key=id()
+   await db.query(`INSERT INTO personnel_administrative_reports (id,customer_id,subject_user_id,author_id,title,narrative,incident_date,report_reason,other_reason,incident_location,involved_person,witnesses,actions_taken,incident_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,[key,customer.id,data.subjectUserId||null,user.id,title,narrative,data.incidentDate||null,data.reportReason,trim(data.otherReason,500),trim(data.incidentLocation,500),trim(data.involvedPerson,500),trim(data.witnesses,5000),trim(data.actionsTaken,5000),data.incidentId||null])
+   await audit(customer.id,user.id,'administrative_report',key,'submitted');return {id:key}
  })
 
 export const reviewPersonnelRequest = createServerFn({method:'POST'})
