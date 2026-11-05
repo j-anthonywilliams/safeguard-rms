@@ -5,14 +5,15 @@ import { requireRole } from '@/lib/authorization.server'
 
 const uid = () => crypto.randomUUID()
 const clean = (v: string, max: number) => (v || '').trim().slice(0, max)
-const hiringRoles = ['office_staff', 'supervisor', 'admin', 'backend'] as const
+const hiringRoles = ['office_staff', 'admin', 'backend'] as const
+export type ApplicationDetails = { phone:string; address:string; city:string; state:string; postalCode:string; preferredShifts:string[]; availableDays:string[]; startDate:string; workAuthorized:boolean; sponsorshipRequired:boolean; employmentHistory:{employer:string;title:string;start:string;end:string;description:string}[]; educationHistory:{institution:string;qualification:string;field:string;completion:string}[]; licenses:{name:string;issuer:string;number:string;expires:string}[]; references:{name:string;relationship:string;contact:string}[]; certificationAccepted:boolean }
 const phases = ['application_received','application_review','interview','conditional_offer','pre_employment','final_offer','onboarding','employee_activation'] as const
 
 export const listRecruitment = createServerFn({ method: 'GET' }).handler(async () => {
   await requireRole([...hiringRoles]); const customer = await getCustomerContext(); const db = getDb()
   const [postings, applications] = await Promise.all([
     db.query<{id:string;slug:string;title:string;status:string;description:string}>(`SELECT id,slug,title,status,description FROM personnel_job_postings WHERE customer_id=$1 ORDER BY created_at DESC`,[customer.id]),
-    db.query<{id:string;postingId:string;candidateId:string;fullName:string;email:string;title:string;stage:string;disposition:string;followUpOn:string|null}>(`SELECT a.id,a.posting_id AS "postingId",a.candidate_id AS "candidateId",c.full_name AS "fullName",c.email,p.title,a.stage,a.disposition,a.follow_up_on::text AS "followUpOn" FROM personnel_job_applications a JOIN personnel_candidates c ON c.id=a.candidate_id AND c.customer_id=a.customer_id JOIN personnel_job_postings p ON p.id=a.posting_id AND p.customer_id=a.customer_id WHERE a.customer_id=$1 ORDER BY a.updated_at DESC LIMIT 500`,[customer.id]),
+    db.query<{id:string;postingId:string;candidateId:string;fullName:string;email:string;title:string;stage:string;disposition:string;followUpOn:string|null;applicationDetails:ApplicationDetails|null}>(`SELECT a.id,a.posting_id AS "postingId",a.candidate_id AS "candidateId",c.full_name AS "fullName",c.email,p.title,a.stage,a.disposition,a.follow_up_on::text AS "followUpOn",a.application_data AS "applicationDetails" FROM personnel_job_applications a JOIN personnel_candidates c ON c.id=a.candidate_id AND c.customer_id=a.customer_id JOIN personnel_job_postings p ON p.id=a.posting_id AND p.customer_id=a.customer_id WHERE a.customer_id=$1 ORDER BY a.updated_at DESC LIMIT 500`,[customer.id]),
   ])
   return {postings:postings.rows,applications:applications.rows,phases:[...phases]}
 })
@@ -43,12 +44,16 @@ export const getPublicJob = createServerFn({method:'GET'})
  })
 
 export const submitPublicApplication = createServerFn({method:'POST'})
- .inputValidator((data:{slug:string;fullName:string;email:string;coverNote:string;website?:string})=>data)
+ .inputValidator((data:{slug:string;fullName:string;email:string;coverNote:string;website?:string;details:ApplicationDetails})=>data)
  .handler(async ({data})=>{
   // Honeypot is only one layer; production should add IP throttling and abuse monitoring.
   if(data.website)throw new Error('Unable to submit application')
   const name=clean(data.fullName,160),email=clean(data.email.toLowerCase(),254)
   if(name.length<2||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw new Error('Valid name and email required')
+  const details=data.details
+  if(!details||!details.certificationAccepted||!details.phone?.trim()||!details.address?.trim()||!details.city?.trim()||!details.state?.trim()||!details.postalCode?.trim()||typeof details.workAuthorized!=='boolean'||typeof details.sponsorshipRequired!=='boolean')throw new Error('Complete required application fields and certification')
+  const safeDetails:ApplicationDetails={phone:clean(details.phone,40),address:clean(details.address,200),city:clean(details.city,100),state:clean(details.state,80),postalCode:clean(details.postalCode,25),preferredShifts:(details.preferredShifts||[]).slice(0,8).map(v=>clean(v,40)),availableDays:(details.availableDays||[]).slice(0,7).map(v=>clean(v,20)),startDate:clean(details.startDate,10),workAuthorized:details.workAuthorized,sponsorshipRequired:details.sponsorshipRequired,employmentHistory:(details.employmentHistory||[]).slice(0,12).map(v=>({employer:clean(v.employer,160),title:clean(v.title,160),start:clean(v.start,20),end:clean(v.end,20),description:clean(v.description,1500)})),educationHistory:(details.educationHistory||[]).slice(0,12).map(v=>({institution:clean(v.institution,160),qualification:clean(v.qualification,160),field:clean(v.field,160),completion:clean(v.completion,20)})),licenses:(details.licenses||[]).slice(0,20).map(v=>({name:clean(v.name,160),issuer:clean(v.issuer,160),number:clean(v.number,100),expires:clean(v.expires,20)})),references:(details.references||[]).slice(0,8).map(v=>({name:clean(v.name,160),relationship:clean(v.relationship,100),contact:clean(v.contact,160)})),certificationAccepted:true}
+  if(JSON.stringify(safeDetails).length>25000)throw new Error('Application exceeds size limit')
   const customer=await getCustomerContext(),db=getDb(),client=await db.connect()
   try {
    await client.query('BEGIN')
@@ -60,7 +65,7 @@ export const submitPublicApplication = createServerFn({method:'POST'})
    const userId=uid(),candidateId=uid(),applicationId=uid(),now=new Date().toISOString()
    await client.query(`INSERT INTO users(id,email,display_name,is_archived,created_at,updated_at,last_sign_in) VALUES($1,$2,$3,1,$4,$4,$4)`,[userId,email,name,now])
    await client.query(`INSERT INTO personnel_candidates(id,customer_id,user_id,full_name,email,created_by,job_title,stage) VALUES($1,$2,$3,$4,$5,$6,$7,'application_received')`,[candidateId,customer.id,userId,name,email,job.created_by,job.onboarding_job_title])
-   await client.query(`INSERT INTO personnel_job_applications(id,customer_id,posting_id,candidate_id,cover_note) VALUES($1,$2,$3,$4,$5)`,[applicationId,customer.id,job.id,candidateId,clean(data.coverNote,5000)])
+   await client.query(`INSERT INTO personnel_job_applications(id,customer_id,posting_id,candidate_id,cover_note,application_data) VALUES($1,$2,$3,$4,$5,$6::jsonb)`,[applicationId,customer.id,job.id,candidateId,clean(data.coverNote,5000),JSON.stringify(safeDetails)])
    await client.query(`INSERT INTO personnel_onboarding_steps(id,customer_id,candidate_id,title,requirement_kind,required,source_template_id) SELECT md5($1::text||r.id),$2,$1,r.title,r.kind,r.required,t.id FROM personnel_onboarding_templates t JOIN personnel_onboarding_template_requirements r ON r.template_id=t.id WHERE t.customer_id=$2 AND t.active=true AND (t.job_title IS NULL OR lower(t.job_title)=lower($3))`,[candidateId,customer.id,job.onboarding_job_title])
    await client.query(`INSERT INTO personnel_application_events(id,customer_id,application_id,action,note) VALUES($1,$2,$3,'submitted','Public application')`,[uid(),customer.id,applicationId])
    await client.query('COMMIT');return {ok:true}
