@@ -12,33 +12,34 @@ const phases = ['application_received','application_review','interview','conditi
 export const listRecruitment = createServerFn({ method: 'GET' }).handler(async () => {
   await requireRole([...hiringRoles]); const customer = await getCustomerContext(); const db = getDb()
   const [postings, applications] = await Promise.all([
-    db.query<{id:string;slug:string;title:string;status:string;description:string}>(`SELECT id,slug,title,status,description FROM personnel_job_postings WHERE customer_id=$1 ORDER BY created_at DESC`,[customer.id]),
+    db.query<{id:string;slug:string;title:string;status:string;description:string;expiresAt:string|null;onboardingJobTitle:string}>(`SELECT id,slug,title,status,description,expires_at::text AS "expiresAt",onboarding_job_title AS "onboardingJobTitle" FROM personnel_job_postings WHERE customer_id=$1 ORDER BY created_at DESC`,[customer.id]),
     db.query<{id:string;postingId:string;candidateId:string;fullName:string;email:string;title:string;stage:string;disposition:string;followUpOn:string|null;applicationDetails:ApplicationDetails|null}>(`SELECT a.id,a.posting_id AS "postingId",a.candidate_id AS "candidateId",c.full_name AS "fullName",c.email,p.title,a.stage,a.disposition,a.follow_up_on::text AS "followUpOn",a.application_data AS "applicationDetails" FROM personnel_job_applications a JOIN personnel_candidates c ON c.id=a.candidate_id AND c.customer_id=a.customer_id JOIN personnel_job_postings p ON p.id=a.posting_id AND p.customer_id=a.customer_id WHERE a.customer_id=$1 ORDER BY a.updated_at DESC LIMIT 500`,[customer.id]),
   ])
   return {postings:postings.rows,applications:applications.rows,phases:[...phases]}
 })
 
 export const createJobPosting = createServerFn({method:'POST'})
- .inputValidator((data:{title:string;description:string;qualifications:string;location:string;employmentType:string;compensation:string;onboardingJobTitle:string})=>data)
+ .inputValidator((data:{title:string;description:string;qualifications:string;location:string;employmentType:string;compensation:string;onboardingJobTitle:string;expirationDays?:number})=>data)
  .handler(async ({data})=>{
   const user=await requireRole([...hiringRoles]);const customer=await getCustomerContext()
   const title=clean(data.title,160);if(!title)throw new Error('Job title required')
   const slug=`${title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,55)}-${uid().slice(0,8)}`
-  const key=uid();await getDb().query(`INSERT INTO personnel_job_postings(id,customer_id,slug,title,description,qualifications,location,employment_type,compensation,onboarding_job_title,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,[key,customer.id,slug,title,clean(data.description,10000),clean(data.qualifications,5000),clean(data.location,200),clean(data.employmentType,80),clean(data.compensation,120),clean(data.onboardingJobTitle,160)||title,user.id]);return {id:key,slug}
+  const days=Number(data.expirationDays??30);if(!Number.isInteger(days)||days<1||days>365)throw new Error("Expiration must be 1 to 365 days")
+  const key=uid();await getDb().query(`INSERT INTO personnel_job_postings(id,customer_id,slug,title,description,qualifications,location,employment_type,compensation,onboarding_job_title,created_by,posting_duration_days) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,[key,customer.id,slug,title,clean(data.description,10000),clean(data.qualifications,5000),clean(data.location,200),clean(data.employmentType,80),clean(data.compensation,120),clean(data.onboardingJobTitle,160)||title,user.id,days]);return {id:key,slug}
  })
 
 export const setJobPostingStatus = createServerFn({method:'POST'})
  .inputValidator((data:{id:string;status:'draft'|'published'|'closed'|'archived'})=>data)
  .handler(async ({data})=>{
   await requireRole([...hiringRoles]);const customer=await getCustomerContext()
-  const r=await getDb().query(`UPDATE personnel_job_postings SET status=$1 WHERE id=$2 AND customer_id=$3 RETURNING id`,[data.status,data.id,customer.id]);if(!r.rowCount)throw new Error('Job not found');return {ok:true}
+  const r=await getDb().query(`UPDATE personnel_job_postings SET status=$1,expires_at=CASE WHEN $1='published' THEN now() + (posting_duration_days * interval '1 day') ELSE expires_at END WHERE id=$2 AND customer_id=$3 RETURNING id`,[data.status,data.id,customer.id]);if(!r.rowCount)throw new Error('Job not found');return {ok:true}
  })
 
 export const getPublicJob = createServerFn({method:'GET'})
  .inputValidator((data:{slug:string})=>data)
  .handler(async ({data})=>{
   const customer=await getCustomerContext()
-  const result=await getDb().query<{id:string;title:string;description:string;qualifications:string;location:string;employmentType:string;compensation:string}>(`SELECT id,title,description,qualifications,location,employment_type AS "employmentType",compensation FROM personnel_job_postings WHERE customer_id=$1 AND slug=$2 AND status='published' LIMIT 1`,[customer.id,clean(data.slug,100)])
+  const result=await getDb().query<{id:string;title:string;description:string;qualifications:string;location:string;employmentType:string;compensation:string}>(`SELECT id,title,description,qualifications,location,employment_type AS "employmentType",compensation FROM personnel_job_postings WHERE customer_id=$1 AND slug=$2 AND status='published' AND (expires_at IS NULL OR expires_at>now()) LIMIT 1`,[customer.id,clean(data.slug,100)])
   if(!result.rows[0])throw new Error('This position is not accepting applications')
   return result.rows[0]
  })
@@ -57,7 +58,7 @@ export const submitPublicApplication = createServerFn({method:'POST'})
   const customer=await getCustomerContext(),db=getDb(),client=await db.connect()
   try {
    await client.query('BEGIN')
-   const posting=await client.query<{id:string;created_by:string;onboarding_job_title:string}>(`SELECT id,created_by,onboarding_job_title FROM personnel_job_postings WHERE customer_id=$1 AND slug=$2 AND status='published' FOR UPDATE`,[customer.id,clean(data.slug,100)])
+   const posting=await client.query<{id:string;created_by:string;onboarding_job_title:string}>(`SELECT id,created_by,onboarding_job_title FROM personnel_job_postings WHERE customer_id=$1 AND slug=$2 AND status='published' AND (expires_at IS NULL OR expires_at>now()) FOR UPDATE`,[customer.id,clean(data.slug,100)])
    const job=posting.rows[0];if(!job)throw new Error('Position is not accepting applications')
    // Prevent duplicate applications; existing user identities are not automatically granted access.
    const existing=await client.query<{id:string}>(`SELECT id FROM users WHERE lower(email)=$1 LIMIT 1`,[email])
@@ -107,4 +108,18 @@ export const changeApplicationStage = createServerFn({method:'POST'})
    }
    await client.query('COMMIT');return {ok:true,notificationQueued:data.action==='reject'}
   }catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
+ })
+
+// Interview scheduling is scoped to the current customer; deferred applicants remain selectable.
+export const listRecruitmentInterviews = createServerFn({method:'GET'}).handler(async()=>{
+ await requireRole([...hiringRoles]);const customer=await getCustomerContext()
+ const result=await getDb().query<{id:string;applicationId:string;scheduledAt:string;interviewer:string;notes:string;fullName:string;disposition:string}>(`SELECT i.id,i.application_id AS "applicationId",i.scheduled_at::text AS "scheduledAt",i.interviewer,i.notes,c.full_name AS "fullName",a.disposition FROM personnel_interviews i JOIN personnel_job_applications a ON a.id=i.application_id AND a.customer_id=i.customer_id JOIN personnel_candidates c ON c.id=a.candidate_id AND c.customer_id=a.customer_id WHERE i.customer_id=$1 ORDER BY i.scheduled_at DESC LIMIT 200`,[customer.id]);return result.rows
+})
+export const scheduleRecruitmentInterview = createServerFn({method:'POST'})
+ .inputValidator((data:{applicationId:string;scheduledAt:string;interviewer:string;notes:string})=>data)
+ .handler(async({data})=>{
+ const actor=await requireRole([...hiringRoles]);const customer=await getCustomerContext();const db=getDb()
+ const date=new Date(data.scheduledAt);if(!Number.isFinite(date.getTime()))throw new Error('Valid interview date required')
+ const candidate=await db.query(`SELECT id FROM personnel_job_applications WHERE id=$1 AND customer_id=$2 AND disposition IN ('active','deferred')`,[data.applicationId,customer.id]);if(!candidate.rowCount)throw new Error('Candidate not eligible for interview')
+ const id=uid();await db.query(`INSERT INTO personnel_interviews(id,customer_id,application_id,scheduled_at,interviewer,notes,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)`,[id,customer.id,data.applicationId,date.toISOString(),clean(data.interviewer,160),clean(data.notes,2000),actor.id]);return {id}
  })
