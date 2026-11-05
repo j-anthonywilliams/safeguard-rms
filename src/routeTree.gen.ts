@@ -15,10 +15,12 @@ import { Route as PlatformCustomersRouteImport } from './routes/platform-custome
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
+import { Route as ApplySlugRouteImport } from './routes/apply/$slug'
 import { Route as AppUsersRouteImport } from './routes/app/users'
 import { Route as AppTrainingPreviewRouteImport } from './routes/app/training-preview'
 import { Route as AppTrainingRouteImport } from './routes/app/training'
 import { Route as AppSchedulerRouteImport } from './routes/app/scheduler'
+import { Route as AppRecruitmentRouteImport } from './routes/app/recruitment'
 import { Route as AppPropertyRouteImport } from './routes/app/property'
 import { Route as AppProfileRouteImport } from './routes/app/profile'
 import { Route as AppOrganizationRouteImport } from './routes/app/organization'
@@ -63,6 +65,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
+const ApplySlugRoute = ApplySlugRouteImport.update({
+  id: '/apply/$slug',
+  path: '/apply/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppUsersRoute = AppUsersRouteImport.update({
   id: '/users',
   path: '/users',
@@ -81,6 +88,11 @@ const AppTrainingRoute = AppTrainingRouteImport.update({
 const AppSchedulerRoute = AppSchedulerRouteImport.update({
   id: '/scheduler',
   path: '/scheduler',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppRecruitmentRoute = AppRecruitmentRouteImport.update({
+  id: '/recruitment',
+  path: '/recruitment',
   getParentRoute: () => AppRoute,
 } as any)
 const AppPropertyRoute = AppPropertyRouteImport.update({
@@ -168,10 +180,12 @@ export interface FileRoutesByFullPath {
   '/app/organization': typeof AppOrganizationRoute
   '/app/profile': typeof AppProfileRoute
   '/app/property': typeof AppPropertyRoute
+  '/app/recruitment': typeof AppRecruitmentRoute
   '/app/scheduler': typeof AppSchedulerRoute
   '/app/training': typeof AppTrainingRoute
   '/app/training-preview': typeof AppTrainingPreviewRoute
   '/app/users': typeof AppUsersRoute
+  '/apply/$slug': typeof ApplySlugRoute
   '/app/': typeof AppIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/platform-auth/$': typeof ApiPlatformAuthSplatRoute
@@ -192,10 +206,12 @@ export interface FileRoutesByTo {
   '/app/organization': typeof AppOrganizationRoute
   '/app/profile': typeof AppProfileRoute
   '/app/property': typeof AppPropertyRoute
+  '/app/recruitment': typeof AppRecruitmentRoute
   '/app/scheduler': typeof AppSchedulerRoute
   '/app/training': typeof AppTrainingRoute
   '/app/training-preview': typeof AppTrainingPreviewRoute
   '/app/users': typeof AppUsersRoute
+  '/apply/$slug': typeof ApplySlugRoute
   '/app': typeof AppIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/platform-auth/$': typeof ApiPlatformAuthSplatRoute
@@ -218,10 +234,12 @@ export interface FileRoutesById {
   '/app/organization': typeof AppOrganizationRoute
   '/app/profile': typeof AppProfileRoute
   '/app/property': typeof AppPropertyRoute
+  '/app/recruitment': typeof AppRecruitmentRoute
   '/app/scheduler': typeof AppSchedulerRoute
   '/app/training': typeof AppTrainingRoute
   '/app/training-preview': typeof AppTrainingPreviewRoute
   '/app/users': typeof AppUsersRoute
+  '/apply/$slug': typeof ApplySlugRoute
   '/app/': typeof AppIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/platform-auth/$': typeof ApiPlatformAuthSplatRoute
@@ -245,10 +263,12 @@ export interface FileRouteTypes {
     | '/app/organization'
     | '/app/profile'
     | '/app/property'
+    | '/app/recruitment'
     | '/app/scheduler'
     | '/app/training'
     | '/app/training-preview'
     | '/app/users'
+    | '/apply/$slug'
     | '/app/'
     | '/api/auth/$'
     | '/api/platform-auth/$'
@@ -269,10 +289,12 @@ export interface FileRouteTypes {
     | '/app/organization'
     | '/app/profile'
     | '/app/property'
+    | '/app/recruitment'
     | '/app/scheduler'
     | '/app/training'
     | '/app/training-preview'
     | '/app/users'
+    | '/apply/$slug'
     | '/app'
     | '/api/auth/$'
     | '/api/platform-auth/$'
@@ -294,10 +316,12 @@ export interface FileRouteTypes {
     | '/app/organization'
     | '/app/profile'
     | '/app/property'
+    | '/app/recruitment'
     | '/app/scheduler'
     | '/app/training'
     | '/app/training-preview'
     | '/app/users'
+    | '/apply/$slug'
     | '/app/'
     | '/api/auth/$'
     | '/api/platform-auth/$'
@@ -310,6 +334,7 @@ export interface RootRouteChildren {
   PlatformLoginRoute: typeof PlatformLoginRoute
   PlatformUsersRoute: typeof PlatformUsersRoute
   ApiTestRoute: typeof ApiTestRoute
+  ApplySlugRoute: typeof ApplySlugRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiPlatformAuthSplatRoute: typeof ApiPlatformAuthSplatRoute
 }
@@ -358,6 +383,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/apply/$slug': {
+      id: '/apply/$slug'
+      path: '/apply/$slug'
+      fullPath: '/apply/$slug'
+      preLoaderRoute: typeof ApplySlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app/users': {
       id: '/app/users'
       path: '/users'
@@ -384,6 +416,13 @@ declare module '@tanstack/react-router' {
       path: '/scheduler'
       fullPath: '/app/scheduler'
       preLoaderRoute: typeof AppSchedulerRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/recruitment': {
+      id: '/app/recruitment'
+      path: '/recruitment'
+      fullPath: '/app/recruitment'
+      preLoaderRoute: typeof AppRecruitmentRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/property': {
@@ -491,6 +530,7 @@ interface AppRouteChildren {
   AppOrganizationRoute: typeof AppOrganizationRoute
   AppProfileRoute: typeof AppProfileRoute
   AppPropertyRoute: typeof AppPropertyRoute
+  AppRecruitmentRoute: typeof AppRecruitmentRoute
   AppSchedulerRoute: typeof AppSchedulerRoute
   AppTrainingRoute: typeof AppTrainingRoute
   AppTrainingPreviewRoute: typeof AppTrainingPreviewRoute
@@ -509,6 +549,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppOrganizationRoute: AppOrganizationRoute,
   AppProfileRoute: AppProfileRoute,
   AppPropertyRoute: AppPropertyRoute,
+  AppRecruitmentRoute: AppRecruitmentRoute,
   AppSchedulerRoute: AppSchedulerRoute,
   AppTrainingRoute: AppTrainingRoute,
   AppTrainingPreviewRoute: AppTrainingPreviewRoute,
@@ -525,6 +566,7 @@ const rootRouteChildren: RootRouteChildren = {
   PlatformLoginRoute: PlatformLoginRoute,
   PlatformUsersRoute: PlatformUsersRoute,
   ApiTestRoute: ApiTestRoute,
+  ApplySlugRoute: ApplySlugRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiPlatformAuthSplatRoute: ApiPlatformAuthSplatRoute,
 }

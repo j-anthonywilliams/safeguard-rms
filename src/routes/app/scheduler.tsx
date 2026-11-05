@@ -104,6 +104,91 @@ const datesBetween = (start: Date, end: Date) => {
   return dates
 }
 
+// Time values are interpreted in the customer's local schedule day.
+const timeToMinutes = (value: string) => {
+  const [hours, minutes] = value.split(':').map(Number)
+  return hours * 60 + minutes
+}
+
+const shiftRange = (entry: ScheduleEntry, day: string) => {
+  const start = timeToMinutes(entry.startTime)
+  let end = timeToMinutes(entry.endTime)
+  if (end <= start) end += 1440
+  const offset = Math.round((new Date(`${entry.shiftDate}T12:00:00`).getTime() - new Date(`${day}T12:00:00`).getTime()) / 86400000) * 1440
+  return { start: start + offset, end: end + offset }
+}
+
+const previousDate = (day: string) => {
+  const date = new Date(`${day}T12:00:00`)
+  date.setDate(date.getDate() - 1)
+  return formatDate(date)
+}
+
+function DailyCoverageTimeline({
+  day, entries, ptoRequests, users, editable, onEdit, onCreate,
+}: {
+  day: string
+  entries: ScheduleEntry[]
+  ptoRequests: PtoRequest[]
+  users: UserRow[]
+  editable: boolean
+  onEdit: (entry: ScheduleEntry) => void
+  onCreate: (time: string) => void
+}) {
+  const [minimum, setMinimum] = useState(2)
+  const nameFor = (id: string) => users.find(user => user.id === id)?.displayName || users.find(user => user.id === id)?.email || id
+  const relevant = entries.filter(entry => entry.shiftDate === day || entry.shiftDate === previousDate(day))
+    .map(entry => ({ entry, ...shiftRange(entry, day) }))
+    .filter(row => row.end > 0 && row.start < 1440)
+  const ptoFor = (id: string, status: 'Approved' | 'Pending') => ptoRequests.some(request => request.userId === id && request.status === status && request.startDate <= day && request.endDate >= day)
+  const slots = Array.from({ length: 24 }, (_, hour) => {
+    const active = relevant.filter(row => row.start < (hour + 1) * 60 && row.end > hour * 60)
+    const available = new Set(active.filter(row => !ptoFor(row.entry.userId, 'Approved')).map(row => row.entry.userId)).size
+    const pending = new Set(active.filter(row => ptoFor(row.entry.userId, 'Pending')).map(row => row.entry.userId)).size
+    return { hour, available, pending, shortage: Math.max(0, minimum - available) }
+  })
+  const gaps = slots.filter(slot => slot.shortage > 0)
+  return (
+    <section className="space-y-3 rounded-lg border p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div><h3 className="font-semibold">24-hour staffing coverage</h3><p className="text-xs text-muted-foreground">Click a shift to edit or a shortage to build a shift. Approved leave reduces coverage; pending leave is flagged.</p></div>
+        <label className="flex items-center gap-2 text-xs">Minimum on duty
+          <Input aria-label="Minimum staff on duty" type="number" min={0} max={100} className="h-8 w-20" value={minimum} onChange={event => setMinimum(Math.max(0, Math.min(100, Number(event.target.value) || 0)))} />
+        </label>
+      </div>
+      <div className="flex flex-wrap gap-3 text-xs">
+        <span className="flex items-center gap-1"><span className="size-3 rounded bg-emerald-600" />Scheduled</span>
+        <span className="flex items-center gap-1"><span className="size-3 rounded bg-red-600" />Under minimum</span>
+        <span className="flex items-center gap-1"><span className="size-3 rounded bg-amber-500" />Pending PTO</span>
+        <span className="flex items-center gap-1"><span className="size-3 rounded bg-slate-500" />Approved PTO</span>
+      </div>
+      <div className="overflow-x-auto">
+        <div className="min-w-[640px] space-y-2">
+          <div className="ml-28 grid grid-cols-8 text-[10px] text-muted-foreground">{Array.from({ length: 8 }, (_, i) => <span key={i}>{String(i * 3).padStart(2, '0')}:00</span>)}</div>
+          {relevant.map(({ entry, start, end }) => {
+            const approved = ptoFor(entry.userId, 'Approved')
+            const pending = ptoFor(entry.userId, 'Pending')
+            return <div key={entry.id} className="flex items-center gap-2">
+              <span className="w-26 shrink-0 truncate text-xs" title={nameFor(entry.userId)}>{nameFor(entry.userId)}</span>
+              <div className="relative h-7 flex-1 rounded bg-muted/40" style={{ backgroundImage: 'linear-gradient(to right, var(--border) 1px, transparent 1px)', backgroundSize: '12.5% 100%' }}>
+                <button type="button" disabled={!editable} onClick={() => onEdit(entry)} title={`${entry.title}: ${entry.startTime}-${entry.endTime}${approved ? ' (approved PTO)' : pending ? ' (pending PTO)' : ''}`} className={`absolute top-1 h-5 rounded text-[10px] text-white ${approved ? 'bg-slate-500' : pending ? 'bg-amber-500' : 'bg-emerald-600'} ${editable ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`} style={{ left: `${Math.max(0, start) / 1440 * 100}%`, width: `${(Math.min(1440, end) - Math.max(0, start)) / 1440 * 100}%` }} aria-label={`Edit ${entry.title} for ${nameFor(entry.userId)}`} />
+              </div>
+            </div>
+          })}
+          {!relevant.length && <p className="text-xs text-muted-foreground">No scheduled shifts on this date.</p>}
+          <div className="flex items-center gap-2 pt-2">
+            <span className="w-26 shrink-0 text-xs font-semibold">Coverage</span>
+            <div className="flex h-9 flex-1 overflow-hidden rounded border" aria-label="Hourly coverage compared with minimum staffing">
+              {slots.map(slot => <button type="button" key={slot.hour} disabled={!editable} onClick={() => onCreate(`${String(slot.hour).padStart(2, '0')}:00`)} title={`${String(slot.hour).padStart(2, '0')}:00 — ${slot.available} available, minimum ${minimum}${slot.pending ? `, ${slot.pending} pending PTO` : ''}`} className={`min-w-0 flex-1 border-r border-background/30 text-[9px] font-semibold text-white ${slot.shortage ? 'bg-red-600' : slot.pending ? 'bg-amber-500' : 'bg-emerald-600'} ${editable ? 'hover:brightness-110' : ''}`}>{slot.available}</button>)}
+            </div>
+          </div>
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">{gaps.length ? `${gaps.length} hourly interval(s) below minimum; maximum shortage ${Math.max(...gaps.map(slot => slot.shortage))}.` : 'All hourly intervals meet the selected minimum.'} The minimum is a preview control, not a saved staffing rule. Coverage is calculated in one-hour intervals; partial-hour gaps may require closer review.</p>
+    </section>
+  )
+}
+
 export const Route = createFileRoute('/app/scheduler')({
   head: () => ({
     meta: [
@@ -722,6 +807,18 @@ function SchedulerPage() {
               <Button variant="ghost" size="icon" aria-label="Close daily shift management" onClick={() => setSelectedDay(null)}><X className="size-4" /></Button>
             </div>
             <div className="space-y-5">
+              <DailyCoverageTimeline
+                day={selectedDay}
+                entries={scheduleEntries}
+                ptoRequests={ptoRequests}
+                users={users}
+                editable={canEditSchedule(accessLevel)}
+                onEdit={entry => { setEditingEntry(entry); setShowShiftEditor(true) }}
+                onCreate={time => {
+                  openNewShift(selectedDay)
+                  setEditingEntry(current => current ? { ...current, startTime: time, endTime: `${String((Number(time.slice(0, 2)) + 8) % 24).padStart(2, '0')}:00` } : current)
+                }}
+              />
               <section className="rounded-lg border p-4">
                 <div className="mb-3 flex items-center justify-between gap-2"><h3 className="font-semibold">Existing shifts</h3>{canEditSchedule(accessLevel) && <Button size="sm" onClick={() => openNewShift(selectedDay)}><Plus className="mr-1 size-4" />Build shift</Button>}</div>
                 <div className="space-y-2">

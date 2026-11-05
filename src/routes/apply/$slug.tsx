@@ -1,0 +1,12 @@
+import { useEffect, useState } from 'react'
+import { createFileRoute } from '@tanstack/react-router'
+import { getPublicJob, submitPublicApplication } from '@/lib/recruitment.functions'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+
+export const Route=createFileRoute('/apply/$slug')({component:ApplicationPage})
+type Job=Awaited<ReturnType<typeof getPublicJob>>
+function ApplicationPage(){const {slug}=Route.useParams();const [job,setJob]=useState<Job|null>(null),[error,setError]=useState(''),[name,setName]=useState(''),[email,setEmail]=useState(''),[note,setNote]=useState(''),[website,setWebsite]=useState(''),[busy,setBusy]=useState(false),[done,setDone]=useState(false)
+ useEffect(()=>{void getPublicJob({data:{slug}}).then(setJob).catch(e=>setError(String(e)))},[slug])
+ return <main className="mx-auto max-w-2xl space-y-5 p-6"><h1 className="text-2xl font-semibold">Employment Application</h1>{error&&<p role="alert" className="text-destructive">{error}</p>}{job&&<><h2 className="text-xl font-medium">{job.title}</h2><p className="whitespace-pre-wrap">{job.description}</p><p className="whitespace-pre-wrap text-sm">{job.qualifications}</p><p className="text-sm">{job.location} · {job.employmentType} · {job.compensation}</p>{done?<p role="status">Application received. Thank you for your interest.</p>:<form className="space-y-3 rounded-lg border p-4" onSubmit={async e=>{e.preventDefault();setBusy(true);try{await submitPublicApplication({data:{slug,fullName:name,email,coverNote:note,website}});setDone(true);setError('')}catch(err){setError(err instanceof Error?err.message:String(err))}finally{setBusy(false)}}}><label className="block text-sm">Full name<Input required maxLength={160} value={name} onChange={e=>setName(e.target.value)}/></label><label className="block text-sm">Email<Input required type="email" maxLength={254} value={email} onChange={e=>setEmail(e.target.value)}/></label><label className="block text-sm">Statement of interest<textarea className="mt-1 w-full rounded border bg-background p-2" maxLength={5000} value={note} onChange={e=>setNote(e.target.value)}/></label><div className="hidden" aria-hidden="true"><input tabIndex={-1} autoComplete="off" value={website} onChange={e=>setWebsite(e.target.value)}/></div><p className="text-xs text-muted-foreground">Submitting your application authorizes the hiring team to review the information provided for recruitment purposes.</p><Button type="submit" disabled={busy}>Submit Application</Button></form>}</>}</main>
+}
