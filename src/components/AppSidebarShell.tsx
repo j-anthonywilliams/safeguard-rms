@@ -16,6 +16,7 @@ import React, {
   useCallback,
 } from 'react'
 import type { ReactNode } from 'react'
+import { useRouterState } from '@tanstack/react-router'
 import { authClient } from '@/lib/auth-client'
 import { getCurrentUserRole } from '@/lib/users.functions'
 import { getPlatformNavigationRole } from '@/lib/platform-navigation.functions'
@@ -59,7 +60,6 @@ const NAV_ITEMS: NavItemDef[] = [
     href: '/app',
     icon: <LayoutDashboard className="h-4 w-4" />,
     label: 'Command center',
-    active: true,
   },
   {
     href: '/app/incidents',
@@ -127,15 +127,21 @@ function NavItem({
   item: NavItemDef
   collapsed: boolean
 }) {
+  const pathname = useRouterState({ select: state => state.location.pathname })
+  const active = item.href.startsWith('/app')
+    ? (item.href === '/app' ? pathname === '/app' || pathname === '/app/' : pathname === item.href || pathname.startsWith(item.href + '/'))
+    : false
+
   const link = (
     <a
       href={item.href}
+      aria-current={active ? 'page' : undefined}
       className={cn(
         'flex items-center gap-2.5 rounded-md text-sm transition-colors cursor-pointer',
         collapsed
           ? 'justify-center w-8 h-8 mx-auto'
           : 'px-3 py-2 w-full',
-        item.active
+        active
           ? 'bg-accent text-foreground font-medium'
           : 'text-muted-foreground hover:bg-accent hover:text-foreground'
       )}

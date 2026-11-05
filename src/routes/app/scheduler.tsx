@@ -147,6 +147,8 @@ function SchedulerPage() {
   const [currentMonth, setCurrentMonth] =
     useState(() => new Date())
 
+  const [selectedDay, setSelectedDay] = useState<string | null>(null)
+
   const [showShiftEditor, setShowShiftEditor] =
     useState(false)
 
@@ -514,6 +516,7 @@ function SchedulerPage() {
                     }`}
                   >
                     <div className="mb-2 flex items-center justify-between">
+                      <button type="button" onClick={() => setSelectedDay(dateString)} aria-label={`Manage ${dateString}`} className="rounded px-1 text-left hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
                       <span
                         className={`text-xs font-medium ${
                           inMonth
@@ -523,6 +526,7 @@ function SchedulerPage() {
                       >
                         {date.getDate()}
                       </span>
+                      </button>
 
                       {canEditSchedule(accessLevel) &&
                         inMonth && (
@@ -531,7 +535,7 @@ function SchedulerPage() {
                             size="icon"
                             className="size-6"
                             onClick={() =>
-                              openNewShift(dateString)
+                              setSelectedDay(dateString)
                             }
                             aria-label={`Add shift for ${dateString}`}
                           >
@@ -554,6 +558,7 @@ function SchedulerPage() {
                               return
                             }
 
+                            setSelectedDay(dateString)
                             setEditingEntry(entry)
                             setShowShiftEditor(true)
                           }}
@@ -708,6 +713,43 @@ function SchedulerPage() {
           )}
         </section>
       </div>
+
+      {selectedDay && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setSelectedDay(null) }}>
+          <section role="dialog" aria-modal="true" aria-label={`Daily shift management for ${selectedDay}`} className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-xl">
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Daily Shift Management</p><h2 className="text-xl font-semibold">{selectedDay}</h2></div>
+              <Button variant="ghost" size="icon" aria-label="Close daily shift management" onClick={() => setSelectedDay(null)}><X className="size-4" /></Button>
+            </div>
+            <div className="space-y-5">
+              <section className="rounded-lg border p-4">
+                <div className="mb-3 flex items-center justify-between gap-2"><h3 className="font-semibold">Existing shifts</h3>{canEditSchedule(accessLevel) && <Button size="sm" onClick={() => openNewShift(selectedDay)}><Plus className="mr-1 size-4" />Build shift</Button>}</div>
+                <div className="space-y-2">
+                  {scheduleEntries.filter(entry => entry.shiftDate === selectedDay).map(entry => (
+                    <div key={entry.id} className="flex items-center justify-between gap-3 rounded-md border p-3">
+                      <div><p className="text-sm font-medium">{entry.title} · {userName(entry.userId)}</p><p className="text-xs text-muted-foreground">{entry.startTime}–{entry.endTime}{entry.notes ? ` · ${entry.notes}` : ''}</p></div>
+                      {canEditSchedule(accessLevel) && <Button size="sm" variant="outline" onClick={() => { setEditingEntry(entry); setShowShiftEditor(true) }}>Edit</Button>}
+                    </div>
+                  ))}
+                  {!scheduleEntries.some(entry => entry.shiftDate === selectedDay) && <p className="text-sm text-muted-foreground">No shifts scheduled.</p>}
+                </div>
+              </section>
+              <section className="rounded-lg border p-4">
+                <h3 className="mb-3 font-semibold">Time off for this day</h3>
+                <div className="space-y-2">
+                  {ptoRequests.filter(request => request.startDate <= selectedDay && request.endDate >= selectedDay && (request.status === 'Approved' || request.status === 'Pending')).map(request => (
+                    <div key={request.id} className="flex items-center justify-between gap-3 rounded-md border p-3">
+                      <div><p className="text-sm font-medium">{userName(request.userId)} · {request.ptoType}</p><p className="text-xs text-muted-foreground">{request.startDate}–{request.endDate}</p></div>
+                      <span className={`rounded px-2 py-1 text-xs font-medium ${request.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>{request.status}</span>
+                    </div>
+                  ))}
+                  {!ptoRequests.some(request => request.startDate <= selectedDay && request.endDate >= selectedDay && (request.status === 'Approved' || request.status === 'Pending')) && <p className="text-sm text-muted-foreground">No approved or pending time-off requests.</p>}
+                </div>
+              </section>
+            </div>
+          </section>
+        </div>
+      )}
 
       {showShiftEditor && (
         <ShiftEditor
