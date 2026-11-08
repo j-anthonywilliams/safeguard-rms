@@ -22,7 +22,7 @@ function DirectoryPage() {
   }, [])
   return <main className="mx-auto max-w-6xl space-y-5 p-6">
     <style>{`@media print { body * { visibility: hidden !important; } #incident-print, #incident-print * { visibility: visible !important; } #incident-print { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; } .no-print { display: none !important; } }`}</style>
-    <div className="no-print flex items-center justify-between gap-3"><h1 className="text-2xl font-semibold">Incident Reports</h1>{selected && <Button variant="outline" onClick={() => setSelected(null)}>Back to reports</Button>}</div>
+    <div className="no-print flex items-center justify-between gap-3"><h1 className="text-2xl font-semibold">Incident Reports</h1>{!selected&&<Button onClick={()=>{window.location.href="/app?newReport=1"}}>New Report</Button>}{selected && <Button variant="outline" onClick={() => setSelected(null)}>Back to reports</Button>}</div>
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {selected ? <>
       <div className="no-print flex justify-end"><Button onClick={() => window.print()}>Print report / Save as PDF</Button></div>

@@ -28,6 +28,21 @@ export const createJobPosting = createServerFn({method:'POST'})
   const key=uid();await getDb().query(`INSERT INTO personnel_job_postings(id,customer_id,slug,title,description,qualifications,location,employment_type,compensation,onboarding_job_title,created_by,posting_duration_days) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,[key,customer.id,slug,title,clean(data.description,10000),clean(data.qualifications,5000),clean(data.location,200),clean(data.employmentType,80),clean(data.compensation,120),clean(data.onboardingJobTitle,160)||title,user.id,days]);return {id:key,slug}
  })
 
+type PostingTemplateInput = {title:string;description:string;qualifications:string;location:string;employmentType:string;compensation:string;onboardingJobTitle:string;expirationDays?:number}
+export const listJobPostingTemplates = createServerFn({method:'GET'}).handler(async()=>{
+ await requireRole([...hiringRoles]);const customer=await getCustomerContext()
+ const result=await getDb().query<{id:string;title:string;description:string;qualifications:string;location:string;employmentType:string;compensation:string;onboardingJobTitle:string;expirationDays:number}>(`SELECT id,name AS title,description,qualifications,location,employment_type AS "employmentType",compensation,onboarding_job_title AS "onboardingJobTitle",posting_duration_days AS "expirationDays" FROM personnel_job_posting_templates WHERE customer_id=$1 AND archived_at IS NULL ORDER BY created_at DESC`,[customer.id]);return result.rows
+})
+export const saveJobPostingTemplate = createServerFn({method:'POST'}).inputValidator((data:PostingTemplateInput)=>data).handler(async({data})=>{
+ const user=await requireRole([...hiringRoles]);const customer=await getCustomerContext()
+ const title=clean(data.title,160);if(!title)throw new Error('Template title required')
+ const days=Number(data.expirationDays??30);if(!Number.isInteger(days)||days<1||days>365)throw new Error('Invalid posting duration')
+ const id=uid();await getDb().query(`INSERT INTO personnel_job_posting_templates(id,customer_id,name,description,qualifications,location,employment_type,compensation,onboarding_job_title,posting_duration_days,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,[id,customer.id,title,clean(data.description,10000),clean(data.qualifications,5000),clean(data.location,200),clean(data.employmentType,80),clean(data.compensation,120),clean(data.onboardingJobTitle,160)||title,days,user.id]);return {id}
+})
+export const publishJobPostingTemplate = createServerFn({method:'POST'}).inputValidator((data:{templateId:string})=>data).handler(async({data})=>{
+ const user=await requireRole([...hiringRoles]);const customer=await getCustomerContext();const db=getDb();const client=await db.connect()
+ try{await client.query('BEGIN');const found=await client.query<{name:string;description:string;qualifications:string;location:string;employment_type:string;compensation:string;onboarding_job_title:string;posting_duration_days:number}>(`SELECT name,description,qualifications,location,employment_type,compensation,onboarding_job_title,posting_duration_days FROM personnel_job_posting_templates WHERE id=$1 AND customer_id=$2 AND archived_at IS NULL FOR SHARE`,[data.templateId,customer.id]);const t=found.rows[0];if(!t)throw new Error('Template not found');if(!t.name.trim())throw new Error('Template title required');const id=uid();const slug=`${t.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,55)}-${uid().slice(0,8)}`;await client.query(`INSERT INTO personnel_job_postings(id,customer_id,slug,title,description,qualifications,location,employment_type,compensation,onboarding_job_title,created_by,posting_duration_days,status,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'published',now()+($12 * interval '1 day'))`,[id,customer.id,slug,t.name,t.description,t.qualifications,t.location,t.employment_type,t.compensation,t.onboarding_job_title,user.id,t.posting_duration_days]);await client.query('COMMIT');return {id,slug}}catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
+})
 export const setJobPostingStatus = createServerFn({method:'POST'})
  .inputValidator((data:{id:string;status:'draft'|'published'|'closed'|'archived'})=>data)
  .handler(async ({data})=>{

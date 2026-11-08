@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { listLogRecords, saveLogRecord, listCustodyActivity, type CustodyLogEvent, type LogRecord } from '@/lib/record-logs.functions'
 import { toast } from 'sonner'
+import { createEvidence } from '@/lib/dashboard.functions'
 
 export const Route = createFileRoute('/app/evidence')({ component: () => <ClientBoundary fallback={<div className="p-6">Loading...</div>}><LogScreen /></ClientBoundary> })
 function LogScreen() {
@@ -23,10 +24,10 @@ function LogScreen() {
   const reload = async () => { try { const [items, events] = await Promise.all([listLogRecords({data:{kind: 'evidence'}}), listCustodyActivity()]); setRecords(items); setCustodyEvents(events); setError('') } catch(e) { setError(e instanceof Error ? e.message : 'Unable to load records') } }
   useEffect(() => { void reload() }, [])
   const open = (record: LogRecord, edit: boolean) => { setSelected(record); setCreating(false); setEditing(edit); setItemNumber(record.itemNumber); setDescription(record.description); setLocation(record.location) }
-  const save = async () => { setBusy(true); try { await saveLogRecord({data:{kind:'evidence',id:creating?null:selected?.id??null,itemNumber,description,location}}); toast.success('Record saved'); setSelected(null); setEditing(false); setCreating(false); await reload() } catch(e) { toast.error(e instanceof Error?e.message:'Unable to save') } finally { setBusy(false) } }
+  const save = async () => { setBusy(true); try { if(creating){await createEvidence({data:{itemNumber,description,location}})}else{await saveLogRecord({data:{kind:'evidence',id:selected?.id??null,itemNumber,description,location}})}; toast.success('Record saved'); setSelected(null); setEditing(false); setCreating(false); await reload() } catch(e) { toast.error(e instanceof Error?e.message:'Unable to save') } finally { setBusy(false) } }
   return <main className="mx-auto max-w-5xl space-y-5 p-6">
     <a className="text-sm underline" href="/app">Back to Command Center</a>
-    <h1 className="text-2xl font-semibold">Evidence Log</h1>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-semibold">Evidence Log</h1><Button onClick={()=>{setSelected(null);setCreating(true);setEditing(true);setItemNumber('');setDescription('');setLocation('')}}>Log Evidence</Button></div>
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {selected || creating ? <Card><CardHeader><CardTitle>{creating?'New record':selected?.itemNumber}</CardTitle></CardHeader><CardContent className="space-y-4">
       <div className="flex gap-2"><Button variant="outline" onClick={()=>{setSelected(null);setEditing(false);setCreating(false)}}>Back to log</Button>{!editing&&!creating&&<Button onClick={()=>setEditing(true)}>Edit</Button>}</div>

@@ -350,6 +350,7 @@ function DashboardHome() {
     }
   }
 
+  useEffect(()=>{if(typeof window!=='undefined'&&new URLSearchParams(window.location.search).get('newReport')==='1'){setEditingIncident(null);setActivePanel('incident');window.history.replaceState({},'',window.location.pathname)}},[])
   const openIncidentEditor = (incident?: Incident) => {
     setEditingIncident(incident || null)
     setActivePanel('incident')
