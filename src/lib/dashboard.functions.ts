@@ -1,3 +1,4 @@
+import { validateIncidentPeople, type IncidentPerson } from '@/lib/incident-people'
 import { createServerFn } from '@tanstack/react-start'
 import { getSession } from '@/lib/auth'
 import { getDb } from '@/lib/db.server'
@@ -1332,6 +1333,50 @@ export const updateEvidenceIncident = createServerFn({
   })
 
 
+
+async function replaceIncidentPeople(client: import('pg').PoolClient, incidentId: string, customerId: string, people: IncidentPerson[], actorId: string) {
+  // Keep existing person identifiers when supplied; enforce ownership through incident_id/customer_id.
+  const old = await client.query<{id:string}>(
+    'SELECT id FROM incident_involved_persons WHERE incident_id=$1 AND customer_id=$2', [incidentId, customerId])
+  const before = await client.query('SELECT * FROM incident_involved_persons WHERE incident_id=$1 AND customer_id=$2 ORDER BY sort_order,id', [incidentId, customerId])
+  const oldIds = new Set(old.rows.map(r => r.id))
+  const retained = new Set<string>()
+  for (const [position, person] of people.entries()) {
+    const id = person.id && oldIds.has(person.id) && !retained.has(person.id) ? person.id : crypto.randomUUID()
+    retained.add(id)
+    await client.query(`INSERT INTO incident_involved_persons
+      (id, incident_id, customer_id, name, date_of_birth, phone, email, address, relationships, comments, sort_order)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name,date_of_birth=EXCLUDED.date_of_birth,
+      phone=EXCLUDED.phone,email=EXCLUDED.email,address=EXCLUDED.address,
+      relationships=EXCLUDED.relationships,comments=EXCLUDED.comments,sort_order=EXCLUDED.sort_order,
+      updated_at=NOW() WHERE incident_involved_persons.incident_id=$2 AND incident_involved_persons.customer_id=$3`,
+      [id, incidentId, customerId, person.name, person.dateOfBirth || null, person.phone || null,
+       person.email || null, person.address || null, person.relationships, person.comments || '', position])
+  }
+  await client.query(`INSERT INTO incident_involved_person_audit(id,incident_id,customer_id,actor_id,previous_records,occurred_at)
+    VALUES ($1,$2,$3,$4,$5,NOW())`,[crypto.randomUUID(),incidentId,customerId,actorId,JSON.stringify(before.rows)])
+  for (const oldId of oldIds) if (!retained.has(oldId)) {
+    await client.query('DELETE FROM incident_involved_persons WHERE id=$1 AND incident_id=$2 AND customer_id=$3', [oldId, incidentId, customerId])
+  }
+}
+
+export const getIncidentPeople = createServerFn({ method: 'GET' })
+  .inputValidator((data: { incidentId: string }) => data)
+  .handler(async ({data}) => {
+    const user = await requireActiveUser()
+    if (user.role === 'support') throw new Error('Not authorized')
+    const customer = await getCustomerContext()
+    const db = getDb()
+    const incident = await db.query('SELECT id FROM incidents WHERE id=$1 AND customer_id=$2', [data.incidentId, customer.id])
+    if (!incident.rowCount) throw new Error('Incident not found')
+    const result = await db.query(`SELECT id,name,COALESCE(date_of_birth::text,'') AS "dateOfBirth",COALESCE(phone,'') AS phone,
+      COALESCE(email,'') AS email,COALESCE(address,'') AS address,relationships,
+      COALESCE(comments,'') AS comments FROM incident_involved_persons
+      WHERE incident_id=$1 AND customer_id=$2 ORDER BY sort_order,id`, [data.incidentId, customer.id])
+    return result.rows as IncidentPerson[]
+  })
+
 export const saveIncident = createServerFn({
   method: 'POST',
 })
@@ -1362,6 +1407,7 @@ export const saveIncident = createServerFn({
       reportType: string
       clientId: string | null
       siteId: string | null
+      involvedPeople: IncidentPerson[]
     }) => data,
   )
   .handler(async ({ data }) => {
@@ -1374,6 +1420,7 @@ export const saveIncident = createServerFn({
     const customer = await getCustomerContext()
     const db = getDb()
     const now = new Date().toISOString()
+    const involvedPeople = validateIncidentPeople(data.involvedPeople)
 
     const client = await db.connect()
 
@@ -1594,6 +1641,7 @@ export const saveIncident = createServerFn({
           throw new Error('Incident update failed')
         }
 
+        await replaceIncidentPeople(client, updatedIncident.id, customer.id, involvedPeople, authorizedUser.id)
         await client.query('COMMIT')
 
         return updatedIncident
@@ -1868,6 +1916,7 @@ export const saveIncident = createServerFn({
         throw new Error('Incident could not be created')
       }
 
+      await replaceIncidentPeople(client, incident.id, customer.id, involvedPeople, authorizedUser.id)
       await client.query('COMMIT')
 
       return incident

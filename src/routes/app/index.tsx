@@ -1,3 +1,5 @@
+import { IncidentPeopleEditor } from '@/components/IncidentPeopleEditor'
+import { type IncidentPerson } from '@/lib/incident-people'
 import { getMyTrainingAssignments } from '@/lib/personnel-workflows.functions'
 import {
   useEffect,
@@ -18,6 +20,7 @@ import {
   createEvidence,
   createEquipment,
   getDashboardData,
+  getIncidentPeople,
   getPanelEvidence,
   reviewIncident as reviewIncidentServer,
   saveIncident,
@@ -1139,6 +1142,18 @@ function Panel({
   onSaved: () => void
 }) {
   const [saving, setSaving] = useState(false)
+  const [involvedPeople, setInvolvedPeople] = useState<IncidentPerson[]>([])
+  const [peopleLoaded, setPeopleLoaded] = useState(!initialIncident)
+  useEffect(() => {
+    if (type !== 'incident' || !initialIncident) return
+    let active = true
+    setPeopleLoaded(false)
+    getIncidentPeople({data:{incidentId:initialIncident.id}}).then(rows=>{
+      if(active){setInvolvedPeople(rows);setPeopleLoaded(true)}
+    }).catch(()=>{if(active){setPeopleLoaded(false);toast.error('Could not load involved persons')}})
+    return ()=>{active=false}
+  },[type,initialIncident?.id])
+
   const panelType:
   'incident' | 'equipment' | 'evidence' | 'case' = type
   const [availableEvidence, setAvailableEvidence] = useState<Evidence[]>([])
@@ -1222,7 +1237,6 @@ const requiredFieldKeys: Record<
     'city',
     'state',
     'zipCode',
-    'subjectName',
     'narrative',
   ],
   equipment: [
@@ -1410,6 +1424,7 @@ const field = (
         const now = new Date().toISOString()
 
         if (type === 'incident') {
+          if (!peopleLoaded) throw new Error('Involved persons have not loaded; saving is disabled to prevent data loss')
           const baseReportNumber =
             form.reportNumber?.trim() ||
             `SG-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`
@@ -1424,11 +1439,12 @@ const field = (
               city: form.city.trim(),
               state: form.state.trim().toUpperCase(),
               zipCode: form.zipCode.trim(),
-              subjectName: form.subjectName.trim(),
+              subjectName: involvedPeople[0]?.name.trim() || form.subjectName?.trim() || 'Not provided',
+              involvedPeople,
               subjectPhone:
-                form.subjectPhone?.trim() || null,
+                involvedPeople[0]?.phone?.trim() || form.subjectPhone?.trim() || null,
               subjectDob:
-                form.subjectDob?.trim() || null,
+                involvedPeople[0]?.dateOfBirth || form.subjectDob?.trim() || null,
               violentFlag: form.violentFlag ? 1 : 0,
               banBarFlag: form.banBarFlag ? 1 : 0,
               incidentCodes: JSON.stringify(
@@ -1704,21 +1720,8 @@ const field = (
               {field('State', 'state', 'CA')}
               {field('ZIP code', 'zipCode', '90210')}
 
-              {/* Subject information */}
-              {field('Subject name', 'subjectName', 'Full legal name')}
-
-              {field(
-                'Contact phone',
-                'subjectPhone',
-                '(555) 000-0000',
-                'tel'
-              )}
-
-              {field(
-                'Date of birth',
-                'subjectDob',
-                'MM / DD / YYYY'
-              )}
+              {/* Legacy subject fields are preserved in the database, populated from the first involved person. */}
+              <IncidentPeopleEditor people={involvedPeople} onChange={setInvolvedPeople} />
 
               {/* Incident flags */}
               <div className="grid gap-3 rounded-lg border border-border bg-muted/20 p-3 sm:col-span-2 sm:grid-cols-2">

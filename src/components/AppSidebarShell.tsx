@@ -35,6 +35,7 @@ import {
   ClipboardPlus,
   GraduationCap,
   FileCheck2,
+  Wallet,
   LayoutDashboard,
   Package,
   PanelLeft,
@@ -85,6 +86,11 @@ const NAV_ITEMS: NavItemDef[] = [
     href: '/app/property',
     icon: <Package className="h-4 w-4" />,
     label: 'Property Log',
+  },
+  {
+    href: '/app/payroll-billing',
+    icon: <Wallet className="h-4 w-4" />,
+    label: 'Payroll & Billing',
   },
   {
     href: '/app/scheduler',

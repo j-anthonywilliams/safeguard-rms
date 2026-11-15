@@ -23,6 +23,7 @@ import { Route as AppSchedulerRouteImport } from './routes/app/scheduler'
 import { Route as AppRecruitmentRouteImport } from './routes/app/recruitment'
 import { Route as AppPropertyRouteImport } from './routes/app/property'
 import { Route as AppProfileRouteImport } from './routes/app/profile'
+import { Route as AppPayrollBillingRouteImport } from './routes/app/payroll-billing'
 import { Route as AppOrganizationRouteImport } from './routes/app/organization'
 import { Route as AppOnboardingRouteImport } from './routes/app/onboarding'
 import { Route as AppIncidentsRouteImport } from './routes/app/incidents'
@@ -105,6 +106,11 @@ const AppProfileRoute = AppProfileRouteImport.update({
   path: '/profile',
   getParentRoute: () => AppRoute,
 } as any)
+const AppPayrollBillingRoute = AppPayrollBillingRouteImport.update({
+  id: '/payroll-billing',
+  path: '/payroll-billing',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppOrganizationRoute = AppOrganizationRouteImport.update({
   id: '/organization',
   path: '/organization',
@@ -178,6 +184,7 @@ export interface FileRoutesByFullPath {
   '/app/incidents': typeof AppIncidentsRoute
   '/app/onboarding': typeof AppOnboardingRoute
   '/app/organization': typeof AppOrganizationRoute
+  '/app/payroll-billing': typeof AppPayrollBillingRoute
   '/app/profile': typeof AppProfileRoute
   '/app/property': typeof AppPropertyRoute
   '/app/recruitment': typeof AppRecruitmentRoute
@@ -204,6 +211,7 @@ export interface FileRoutesByTo {
   '/app/incidents': typeof AppIncidentsRoute
   '/app/onboarding': typeof AppOnboardingRoute
   '/app/organization': typeof AppOrganizationRoute
+  '/app/payroll-billing': typeof AppPayrollBillingRoute
   '/app/profile': typeof AppProfileRoute
   '/app/property': typeof AppPropertyRoute
   '/app/recruitment': typeof AppRecruitmentRoute
@@ -232,6 +240,7 @@ export interface FileRoutesById {
   '/app/incidents': typeof AppIncidentsRoute
   '/app/onboarding': typeof AppOnboardingRoute
   '/app/organization': typeof AppOrganizationRoute
+  '/app/payroll-billing': typeof AppPayrollBillingRoute
   '/app/profile': typeof AppProfileRoute
   '/app/property': typeof AppPropertyRoute
   '/app/recruitment': typeof AppRecruitmentRoute
@@ -261,6 +270,7 @@ export interface FileRouteTypes {
     | '/app/incidents'
     | '/app/onboarding'
     | '/app/organization'
+    | '/app/payroll-billing'
     | '/app/profile'
     | '/app/property'
     | '/app/recruitment'
@@ -287,6 +297,7 @@ export interface FileRouteTypes {
     | '/app/incidents'
     | '/app/onboarding'
     | '/app/organization'
+    | '/app/payroll-billing'
     | '/app/profile'
     | '/app/property'
     | '/app/recruitment'
@@ -314,6 +325,7 @@ export interface FileRouteTypes {
     | '/app/incidents'
     | '/app/onboarding'
     | '/app/organization'
+    | '/app/payroll-billing'
     | '/app/profile'
     | '/app/property'
     | '/app/recruitment'
@@ -439,6 +451,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProfileRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/payroll-billing': {
+      id: '/app/payroll-billing'
+      path: '/payroll-billing'
+      fullPath: '/app/payroll-billing'
+      preLoaderRoute: typeof AppPayrollBillingRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/organization': {
       id: '/app/organization'
       path: '/organization'
@@ -528,6 +547,7 @@ interface AppRouteChildren {
   AppIncidentsRoute: typeof AppIncidentsRoute
   AppOnboardingRoute: typeof AppOnboardingRoute
   AppOrganizationRoute: typeof AppOrganizationRoute
+  AppPayrollBillingRoute: typeof AppPayrollBillingRoute
   AppProfileRoute: typeof AppProfileRoute
   AppPropertyRoute: typeof AppPropertyRoute
   AppRecruitmentRoute: typeof AppRecruitmentRoute
@@ -547,6 +567,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppIncidentsRoute: AppIncidentsRoute,
   AppOnboardingRoute: AppOnboardingRoute,
   AppOrganizationRoute: AppOrganizationRoute,
+  AppPayrollBillingRoute: AppPayrollBillingRoute,
   AppProfileRoute: AppProfileRoute,
   AppPropertyRoute: AppPropertyRoute,
   AppRecruitmentRoute: AppRecruitmentRoute,

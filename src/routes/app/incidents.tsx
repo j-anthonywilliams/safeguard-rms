@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { getDashboardData } from '@/lib/dashboard.functions'
+import { getDashboardData, getIncidentPeople } from '@/lib/dashboard.functions'
+import type { IncidentPerson } from '@/lib/incident-people'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -13,6 +14,7 @@ function DirectoryPage() {
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Row | null>(null)
   const [error, setError] = useState('')
+  const [people, setPeople] = useState<IncidentPerson[]>([])
   useEffect(() => {
     let active = true
     getDashboardData().then(data => { if (active) setRows(data.incidents) }).catch(err => {
@@ -20,6 +22,12 @@ function DirectoryPage() {
     })
     return () => { active = false }
   }, [])
+  useEffect(()=>{
+    if(!selected){setPeople([]);return}
+    let active=true
+    getIncidentPeople({data:{incidentId:selected.id}}).then(rows=>{if(active)setPeople(rows)}).catch(err=>{if(active)setError(err instanceof Error?err.message:'Unable to load involved persons')})
+    return ()=>{active=false}
+  },[selected?.id])
   return <main className="mx-auto max-w-6xl space-y-5 p-6">
     <style>{`@media print { body * { visibility: hidden !important; } #incident-print, #incident-print * { visibility: visible !important; } #incident-print { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; } .no-print { display: none !important; } }`}</style>
     <div className="no-print flex items-center justify-between gap-3"><h1 className="text-2xl font-semibold">Incident Reports</h1>{!selected&&<Button onClick={()=>{window.location.href="/app?newReport=1"}}>New Report</Button>}{selected && <Button variant="outline" onClick={() => setSelected(null)}>Back to reports</Button>}</div>
@@ -34,6 +42,14 @@ function DirectoryPage() {
             <p><strong>Subject:</strong> {selected.subjectName}</p><p><strong>Type:</strong> {selected.reportType}</p>
             <p><strong>Codes:</strong> {selected.incidentCodes}</p><p><strong>Disposition:</strong> {selected.disposition}</p>
           </div>
+          <section><h2 className="mb-2 font-semibold">Involved Persons ({people.length})</h2>
+            {people.map((person,i)=><div key={person.id||i} className="mb-3 break-inside-avoid rounded border p-3">
+              <strong>{person.name}</strong> — {person.relationships.join(', ')}
+              <p>DOB: {person.dateOfBirth||'Not provided'} | Phone: {person.phone||'Not provided'}</p>
+              <p>Email: {person.email||'Not provided'}</p><p>Address: {person.address||'Not provided'}</p>
+              {person.comments&&<p className="whitespace-pre-wrap">Comments: {person.comments}</p>}
+            </div>)}
+          </section>
           <section><h2 className="mb-2 font-semibold">Narrative</h2><p className="whitespace-pre-wrap">{selected.narrative}</p></section>
           {selected.reviewFeedback && <section><h2 className="mb-2 font-semibold">Review feedback</h2><p className="whitespace-pre-wrap">{selected.reviewFeedback}</p></section>}
         </CardContent></Card>
