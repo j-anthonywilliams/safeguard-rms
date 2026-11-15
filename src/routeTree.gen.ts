@@ -30,7 +30,6 @@ import { Route as AppIncidentsRouteImport } from './routes/app/incidents'
 import { Route as AppEvidenceRouteImport } from './routes/app/evidence'
 import { Route as AppEquipmentRouteImport } from './routes/app/equipment'
 import { Route as AppCasesRouteImport } from './routes/app/cases'
-import { Route as AppAdministrativeReportsPreviewRouteImport } from './routes/app/administrative-reports-preview'
 import { Route as AppAdministrativeReportsRouteImport } from './routes/app/administrative-reports'
 import { Route as ApiTestRouteImport } from './routes/api/test'
 import { Route as ApiPlatformAuthSplatRouteImport } from './routes/api/platform-auth/$'
@@ -141,12 +140,6 @@ const AppCasesRoute = AppCasesRouteImport.update({
   path: '/cases',
   getParentRoute: () => AppRoute,
 } as any)
-const AppAdministrativeReportsPreviewRoute =
-  AppAdministrativeReportsPreviewRouteImport.update({
-    id: '/administrative-reports-preview',
-    path: '/administrative-reports-preview',
-    getParentRoute: () => AppRoute,
-  } as any)
 const AppAdministrativeReportsRoute =
   AppAdministrativeReportsRouteImport.update({
     id: '/administrative-reports',
@@ -177,7 +170,6 @@ export interface FileRoutesByFullPath {
   '/platform-users': typeof PlatformUsersRoute
   '/api/test': typeof ApiTestRoute
   '/app/administrative-reports': typeof AppAdministrativeReportsRoute
-  '/app/administrative-reports-preview': typeof AppAdministrativeReportsPreviewRoute
   '/app/cases': typeof AppCasesRoute
   '/app/equipment': typeof AppEquipmentRoute
   '/app/evidence': typeof AppEvidenceRoute
@@ -204,7 +196,6 @@ export interface FileRoutesByTo {
   '/platform-users': typeof PlatformUsersRoute
   '/api/test': typeof ApiTestRoute
   '/app/administrative-reports': typeof AppAdministrativeReportsRoute
-  '/app/administrative-reports-preview': typeof AppAdministrativeReportsPreviewRoute
   '/app/cases': typeof AppCasesRoute
   '/app/equipment': typeof AppEquipmentRoute
   '/app/evidence': typeof AppEvidenceRoute
@@ -233,7 +224,6 @@ export interface FileRoutesById {
   '/platform-users': typeof PlatformUsersRoute
   '/api/test': typeof ApiTestRoute
   '/app/administrative-reports': typeof AppAdministrativeReportsRoute
-  '/app/administrative-reports-preview': typeof AppAdministrativeReportsPreviewRoute
   '/app/cases': typeof AppCasesRoute
   '/app/equipment': typeof AppEquipmentRoute
   '/app/evidence': typeof AppEvidenceRoute
@@ -263,7 +253,6 @@ export interface FileRouteTypes {
     | '/platform-users'
     | '/api/test'
     | '/app/administrative-reports'
-    | '/app/administrative-reports-preview'
     | '/app/cases'
     | '/app/equipment'
     | '/app/evidence'
@@ -290,7 +279,6 @@ export interface FileRouteTypes {
     | '/platform-users'
     | '/api/test'
     | '/app/administrative-reports'
-    | '/app/administrative-reports-preview'
     | '/app/cases'
     | '/app/equipment'
     | '/app/evidence'
@@ -318,7 +306,6 @@ export interface FileRouteTypes {
     | '/platform-users'
     | '/api/test'
     | '/app/administrative-reports'
-    | '/app/administrative-reports-preview'
     | '/app/cases'
     | '/app/equipment'
     | '/app/evidence'
@@ -500,13 +487,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCasesRouteImport
       parentRoute: typeof AppRoute
     }
-    '/app/administrative-reports-preview': {
-      id: '/app/administrative-reports-preview'
-      path: '/administrative-reports-preview'
-      fullPath: '/app/administrative-reports-preview'
-      preLoaderRoute: typeof AppAdministrativeReportsPreviewRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/app/administrative-reports': {
       id: '/app/administrative-reports'
       path: '/administrative-reports'
@@ -540,7 +520,6 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppAdministrativeReportsRoute: typeof AppAdministrativeReportsRoute
-  AppAdministrativeReportsPreviewRoute: typeof AppAdministrativeReportsPreviewRoute
   AppCasesRoute: typeof AppCasesRoute
   AppEquipmentRoute: typeof AppEquipmentRoute
   AppEvidenceRoute: typeof AppEvidenceRoute
@@ -560,7 +539,6 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppAdministrativeReportsRoute: AppAdministrativeReportsRoute,
-  AppAdministrativeReportsPreviewRoute: AppAdministrativeReportsPreviewRoute,
   AppCasesRoute: AppCasesRoute,
   AppEquipmentRoute: AppEquipmentRoute,
   AppEvidenceRoute: AppEvidenceRoute,
