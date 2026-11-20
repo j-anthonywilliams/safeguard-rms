@@ -72,15 +72,11 @@ function createAuth() {
     databaseHooks: {
       user: {
         create: {
-          before: async (user, context) => {
-            // This hook also runs for email/password registration. Never
-            // grant public sign-up by virtue of a matching email address.
-            const path = context?.path ?? ''
-            if (!path.includes('/callback/google')) {
-              console.error('[Google Provisioning] Unexpected path:', path)
-              return false
-            }
-
+          before: async (user) => {
+            // Database hooks may run without an HTTP path during OAuth
+            // account creation. Do not reject a verified Google identity
+            // merely because context.path is missing.
+            // Public email registration is denied in the API middleware below.
             if (!user.email || user.emailVerified !== true) {
               return false
             }
@@ -100,7 +96,7 @@ function createAuth() {
             if (result.rows.length !== 1) {
               console.error(
                 '[Google Provisioning] Authorized account lookup failed:',
-                { matches: result.rows.length, path },
+                { matches: result.rows.length },
               )
               return false
             }
@@ -146,7 +142,15 @@ function createAuth() {
       hooks: {
         before: createAuthMiddleware(async ctx => {
           const path = ctx.path
-            
+
+          // Never allow public email/password registration to create
+          // a Better Auth identity through the preauthorized OAuth hook.
+          if (path === '/sign-up/email') {
+            throw new APIError('FORBIDDEN', {
+              message: 'Public registration is disabled',
+            })
+          }
+
           const emailPasswordPaths = [
             '/sign-in/email',
             '/sign-up/email',
