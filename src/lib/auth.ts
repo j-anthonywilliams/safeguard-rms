@@ -77,6 +77,7 @@ function createAuth() {
             // grant public sign-up by virtue of a matching email address.
             const path = context?.path ?? ''
             if (!path.includes('/callback/google')) {
+              console.error('[Google Provisioning] Unexpected path:', path)
               return false
             }
 
@@ -97,6 +98,10 @@ function createAuth() {
               [user.email],
             )
             if (result.rows.length !== 1) {
+              console.error(
+                '[Google Provisioning] Authorized account lookup failed:',
+                { matches: result.rows.length, path },
+              )
               return false
             }
 
