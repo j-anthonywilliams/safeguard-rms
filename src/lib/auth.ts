@@ -124,7 +124,9 @@ function createAuth() {
 
           try {
             policy = await getCustomerAuthPolicy()
-          } catch {
+          } catch (error) {
+            console.error('[Customer Auth Policy] Lookup failed:', error)
+
             throw new APIError('FORBIDDEN', {
               message: 'Customer authentication policy unavailable',
             })
