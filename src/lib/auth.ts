@@ -92,7 +92,7 @@ function createAuth() {
                JOIN app_roles r ON r.user_id = u.id
                WHERE lower(u.email) = lower($1)
                  AND coalesce(u.is_archived, 0) = 0
-                 AND r.role IN ('user','supervisor','investigator','office_staff','admin')
+                 AND r.role IN ('user','supervisor','investigator','office_staff','admin','backend')
                LIMIT 2`,
               [user.email],
             )
