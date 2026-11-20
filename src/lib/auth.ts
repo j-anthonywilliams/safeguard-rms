@@ -6,6 +6,7 @@ import { Pool } from 'pg'
 import { getRequestHeaders } from '@tanstack/start-server-core'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { getCustomerAuthPolicy } from './customer-auth-policy.server'
+import { getCustomerContext } from './customer-context.server'
 
 let pool: Pool | undefined
 let authInstance: ReturnType<typeof createAuth> | undefined
@@ -65,6 +66,46 @@ function createAuth() {
       enabled: true,
     },
 
+    // A Google identity may be created only for an already-provisioned,
+    // non-archived employee in this customer database. Preserve the existing
+    // employee ID so requireActiveUser() resolves the same identity.
+    databaseHooks: {
+      user: {
+        create: {
+          before: async (user, context) => {
+            // This hook also runs for email/password registration. Never
+            // grant public sign-up by virtue of a matching email address.
+            const path = context?.path ?? ''
+            if (!path.includes('/callback/google')) {
+              return false
+            }
+
+            if (!user.email || user.emailVerified !== true) {
+              return false
+            }
+
+            await getCustomerContext()
+            const result = await getPool().query<{
+              id: string
+            }>(
+              `SELECT u.id FROM users u
+               JOIN app_roles r ON r.user_id = u.id
+               WHERE lower(u.email) = lower($1)
+                 AND coalesce(u.is_archived, 0) = 0
+                 AND r.role IN ('user','supervisor','investigator','office_staff','admin')
+               LIMIT 2`,
+              [user.email],
+            )
+            if (result.rows.length !== 1) {
+              return false
+            }
+
+            return { data: { ...user, id: result.rows[0].id } }
+          },
+        },
+      },
+    },
+
     account: {
       accountLinking: {
         enabled: true,
@@ -91,8 +132,8 @@ function createAuth() {
             google: {
               clientId: googleClientId,
               clientSecret: googleClientSecret,
-              disableImplicitSignUp:
-                process.env.NODE_ENV !== 'development',
+              // Creation is restricted by databaseHooks.user.create.before below.
+              disableImplicitSignUp: false,
             },
           }
         : {},
