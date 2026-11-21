@@ -59,6 +59,11 @@ interface NavItemDef {
 
 const NAV_ITEMS: NavItemDef[] = [
   {
+  href: '/app/communications',
+  icon: <MessageSquare className="h-4 w-4" />,
+  label: 'Comms Center',
+  },
+  {
     href: '/app',
     icon: <LayoutDashboard className="h-4 w-4" />,
     label: 'Command center',
@@ -88,11 +93,7 @@ const NAV_ITEMS: NavItemDef[] = [
     icon: <Package className="h-4 w-4" />,
     label: 'Property Log',
   },
-  {
-    href: '/app/communications',
-    icon: <MessageSquare className="h-4 w-4" />,
-    label: 'Communications',
-  },
+
   {
     href: '/app/payroll-billing',
     icon: <Wallet className="h-4 w-4" />,
