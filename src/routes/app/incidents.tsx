@@ -17,7 +17,11 @@ function DirectoryPage() {
   const [people, setPeople] = useState<IncidentPerson[]>([])
   useEffect(() => {
     let active = true
-    getDashboardData().then(data => { if (active) setRows(data.incidents) }).catch(err => {
+    getDashboardData().then(data => { if (active) {
+        setRows(data.incidents)
+        const id = new URLSearchParams(window.location.search).get('reportId')
+        if (id) setSelected(data.incidents.find(row => row.id === id) ?? null)
+      } }).catch(err => {
       if (active) setError(err instanceof Error ? err.message : 'Unable to load records')
     })
     return () => { active = false }

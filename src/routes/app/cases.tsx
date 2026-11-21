@@ -14,7 +14,7 @@ function CaseFilesPage() {
   const [data, setData] = useState<Data | null>(null)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(() => new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('caseId'))
   const [notes, setNotes] = useState<CaseNote[]>([])
   const [newNote, setNewNote] = useState('')
   const [reportId, setReportId] = useState('')

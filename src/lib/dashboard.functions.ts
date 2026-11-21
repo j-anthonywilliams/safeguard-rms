@@ -105,7 +105,7 @@ export interface DashboardDirectoryUser {
 export const getDashboardData = createServerFn({
   method: 'GET',
 }).handler(async () => {
-  
+
   const authorizedUser = await requireRole([
     'user',
     'supervisor',
@@ -891,6 +891,28 @@ export const assignIncidentToCaseFile = createServerFn({ method: 'POST' })
       await connection.query(`UPDATE incidents SET case_file_id = $1
         WHERE customer_id = $2 AND (id = $3 OR parent_incident_id = $3)`,
         [data.caseFileId || null, customer.id, originalId])
+      // Notify the case owner and supervisors with scoped access only when a report is newly linked.
+      if (data.caseFileId) {
+        const caseDetails = await connection.query<{case_number:string;user_id:string}>(
+          `SELECT case_number,user_id FROM case_files WHERE id=$1 AND customer_id=$2`,[data.caseFileId,customer.id])
+        const reportDetails = await connection.query<{report_number:string}>(
+          `SELECT report_number FROM incidents WHERE id=$1 AND customer_id=$2`,[originalId,customer.id])
+        const caseRecord = caseDetails.rows[0]
+        if (caseRecord) {
+          await connection.query(`INSERT INTO workflow_notifications
+            (id,customer_id,recipient_id,event_key,event_type,title,body,case_file_id,report_id,target_path)
+            SELECT gen_random_uuid()::text,$1,u.id,$2,'case_report_added',$3,$4,$5,$6,'/app/cases?caseId='||$5
+            FROM users u JOIN app_roles ar ON ar.user_id=u.id
+            WHERE COALESCE(u.is_archived,0)=0 AND u.id<>$7
+              AND (u.id=$8 OR (ar.role='supervisor' AND EXISTS (
+                SELECT 1 FROM user_customer_assignments ca WHERE ca.user_id=u.id AND ca.customer_id=$1)))
+            ON CONFLICT(customer_id,recipient_id,event_key) DO NOTHING`,
+            [customer.id,`case-report:${data.caseFileId}:${originalId}`,
+              `Report added to case ${caseRecord.case_number}`,
+              `Report ${reportDetails.rows[0]?.report_number??originalId} was linked to case ${caseRecord.case_number}.`,
+              data.caseFileId,originalId,user.id,caseRecord.user_id])
+        }
+      }
       await connection.query('COMMIT')
       return { incidentId: originalId, caseFileId: data.caseFileId || null }
     } catch (error) {

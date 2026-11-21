@@ -61,3 +61,17 @@ export const markCommunicationRead=createServerFn({method:'POST'}).inputValidato
  await getDb().query(`UPDATE communication_recipients SET read_at=COALESCE(read_at,now()) WHERE message_id=$1 AND customer_id=$2 AND user_id=$3`,[data.messageId,customer.id,actor.id])
  return {ok:true}
 })
+
+
+export const listWorkflowNotifications = createServerFn({method:'GET'}).handler(async()=>{
+ const actor=await requireActiveUser();const customer=await getCustomerContext()
+ const result=await getDb().query<{id:string;title:string;body:string;createdAt:string;readAt:string|null;caseFileId:string|null;reportId:string|null;targetPath:string|null}>(
+ `SELECT id,title,body,created_at::text AS "createdAt",read_at::text AS "readAt",case_file_id AS "caseFileId",report_id AS "reportId",target_path AS "targetPath"
+ FROM workflow_notifications WHERE customer_id=$1 AND recipient_id=$2 ORDER BY created_at DESC LIMIT 200`,[customer.id,actor.id])
+ return result.rows
+})
+export const markWorkflowNotificationRead=createServerFn({method:'POST'}).inputValidator((data:{id:string})=>data).handler(async({data})=>{
+ const actor=await requireActiveUser();const customer=await getCustomerContext()
+ await getDb().query(`UPDATE workflow_notifications SET read_at=COALESCE(read_at,now()) WHERE id=$1 AND customer_id=$2 AND recipient_id=$3`,[data.id,customer.id,actor.id])
+ return {ok:true}
+})
