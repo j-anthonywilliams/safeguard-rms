@@ -36,6 +36,7 @@ import {
   GraduationCap,
   FileCheck2,
   Wallet,
+  MessageSquare,
   LayoutDashboard,
   Package,
   PanelLeft,
@@ -86,6 +87,11 @@ const NAV_ITEMS: NavItemDef[] = [
     href: '/app/property',
     icon: <Package className="h-4 w-4" />,
     label: 'Property Log',
+  },
+  {
+    href: '/app/communications',
+    icon: <MessageSquare className="h-4 w-4" />,
+    label: 'Communications',
   },
   {
     href: '/app/payroll-billing',
