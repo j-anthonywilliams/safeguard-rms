@@ -29,6 +29,7 @@ import { Route as AppOnboardingRouteImport } from './routes/app/onboarding'
 import { Route as AppIncidentsRouteImport } from './routes/app/incidents'
 import { Route as AppEvidenceRouteImport } from './routes/app/evidence'
 import { Route as AppEquipmentRouteImport } from './routes/app/equipment'
+import { Route as AppCommunicationsRouteImport } from './routes/app/communications'
 import { Route as AppCasesRouteImport } from './routes/app/cases'
 import { Route as AppAdministrativeReportsRouteImport } from './routes/app/administrative-reports'
 import { Route as ApiTestRouteImport } from './routes/api/test'
@@ -135,6 +136,11 @@ const AppEquipmentRoute = AppEquipmentRouteImport.update({
   path: '/equipment',
   getParentRoute: () => AppRoute,
 } as any)
+const AppCommunicationsRoute = AppCommunicationsRouteImport.update({
+  id: '/communications',
+  path: '/communications',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppCasesRoute = AppCasesRouteImport.update({
   id: '/cases',
   path: '/cases',
@@ -171,6 +177,7 @@ export interface FileRoutesByFullPath {
   '/api/test': typeof ApiTestRoute
   '/app/administrative-reports': typeof AppAdministrativeReportsRoute
   '/app/cases': typeof AppCasesRoute
+  '/app/communications': typeof AppCommunicationsRoute
   '/app/equipment': typeof AppEquipmentRoute
   '/app/evidence': typeof AppEvidenceRoute
   '/app/incidents': typeof AppIncidentsRoute
@@ -197,6 +204,7 @@ export interface FileRoutesByTo {
   '/api/test': typeof ApiTestRoute
   '/app/administrative-reports': typeof AppAdministrativeReportsRoute
   '/app/cases': typeof AppCasesRoute
+  '/app/communications': typeof AppCommunicationsRoute
   '/app/equipment': typeof AppEquipmentRoute
   '/app/evidence': typeof AppEvidenceRoute
   '/app/incidents': typeof AppIncidentsRoute
@@ -225,6 +233,7 @@ export interface FileRoutesById {
   '/api/test': typeof ApiTestRoute
   '/app/administrative-reports': typeof AppAdministrativeReportsRoute
   '/app/cases': typeof AppCasesRoute
+  '/app/communications': typeof AppCommunicationsRoute
   '/app/equipment': typeof AppEquipmentRoute
   '/app/evidence': typeof AppEvidenceRoute
   '/app/incidents': typeof AppIncidentsRoute
@@ -254,6 +263,7 @@ export interface FileRouteTypes {
     | '/api/test'
     | '/app/administrative-reports'
     | '/app/cases'
+    | '/app/communications'
     | '/app/equipment'
     | '/app/evidence'
     | '/app/incidents'
@@ -280,6 +290,7 @@ export interface FileRouteTypes {
     | '/api/test'
     | '/app/administrative-reports'
     | '/app/cases'
+    | '/app/communications'
     | '/app/equipment'
     | '/app/evidence'
     | '/app/incidents'
@@ -307,6 +318,7 @@ export interface FileRouteTypes {
     | '/api/test'
     | '/app/administrative-reports'
     | '/app/cases'
+    | '/app/communications'
     | '/app/equipment'
     | '/app/evidence'
     | '/app/incidents'
@@ -480,6 +492,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppEquipmentRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/communications': {
+      id: '/app/communications'
+      path: '/communications'
+      fullPath: '/app/communications'
+      preLoaderRoute: typeof AppCommunicationsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/cases': {
       id: '/app/cases'
       path: '/cases'
@@ -521,6 +540,7 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppAdministrativeReportsRoute: typeof AppAdministrativeReportsRoute
   AppCasesRoute: typeof AppCasesRoute
+  AppCommunicationsRoute: typeof AppCommunicationsRoute
   AppEquipmentRoute: typeof AppEquipmentRoute
   AppEvidenceRoute: typeof AppEvidenceRoute
   AppIncidentsRoute: typeof AppIncidentsRoute
@@ -540,6 +560,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAdministrativeReportsRoute: AppAdministrativeReportsRoute,
   AppCasesRoute: AppCasesRoute,
+  AppCommunicationsRoute: AppCommunicationsRoute,
   AppEquipmentRoute: AppEquipmentRoute,
   AppEvidenceRoute: AppEvidenceRoute,
   AppIncidentsRoute: AppIncidentsRoute,
